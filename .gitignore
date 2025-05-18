@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[ocd]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+uv.lock
+
+# reflex
+assets/external/
+*.db
+.web
+.states
