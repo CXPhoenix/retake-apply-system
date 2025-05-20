@@ -1,0 +1,55 @@
+name: retake-apply-system
+
+services:
+  app:
+    image: fhsh/retake-apply-system
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: always
+    env_file:
+      - app.env
+    networks:
+      - app
+      - tunnel
+    
+    # for development. if use in production, delete the next 2 lines below.
+    volumes:
+      - ./app:/app
+    command: uv run reflex run
+  
+  mongo:
+    image: mongo:latest
+    restart: always
+    env_file:
+      - mongo.env
+    volumes:
+      - retake-storage:/data/db
+    networks:
+      - app
+  
+  express:
+    image: mongo-express:latest
+    restart: always
+    env_file:
+      - me.env
+    networks:
+      - app
+      - tunnel
+  
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    env_file:
+      - token.env
+    networks:
+      - tunnel
+    command: tunnel run
+  
+networks:
+  app:
+    internal: true
+  tunnel:
+    
+volumes:
+  retake-storage:

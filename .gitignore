@@ -15,3 +15,6 @@ assets/external/
 *.db
 .web
 .states
+
+# app envfile
+*.env

@@ -1,0 +1,23 @@
+FROM ghcr.io/astral-sh/uv:bookworm-slim
+
+RUN apt update && apt install curl unzip -y
+
+RUN uv python install 3.12.9
+
+COPY pyproject.toml /pyproject.toml
+RUN uv venv -p 3.12.9
+RUN uv pip install -r /pyproject.toml
+
+# init reflex
+RUN mkdir -p /reflex-init
+RUN cd /reflex-init
+RUN uv run reflex init --name init_project --template blank
+
+## remove useless files
+RUN cd / && rm -rf /reflex-init
+
+WORKDIR /app
+
+COPY app /app
+
+CMD ["uv", "run", "reflex", "run", "--env", "prod"]

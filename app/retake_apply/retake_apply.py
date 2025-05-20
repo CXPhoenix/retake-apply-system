@@ -1,38 +1,16 @@
-"""Welcome to Reflex! This file outlines the steps to create a basic app."""
+"""校園重補修課程登記系統的主應用程式設定檔案"""
 
 import reflex as rx
 
-from rxconfig import config
+from .pages.index import index
+from .pages.dashboard import user_dashboard
+from .pages.course_selection import course_selection
+from .states.auth import AuthState
+from .utils.lifespan import lifespan
 
-
-class State(rx.State):
-    """The app state."""
-
-    ...
-
-
-def index() -> rx.Component:
-    # Welcome Page (Index)
-    return rx.container(
-        rx.color_mode.button(position="top-right"),
-        rx.vstack(
-            rx.heading("Welcome to Reflex!", size="9"),
-            rx.text(
-                "Get started by editing ",
-                rx.code(f"{config.app_name}/{config.app_name}.py"),
-                size="5",
-            ),
-            rx.link(
-                rx.button("Check out our docs!"),
-                href="https://reflex.dev/docs/getting-started/introduction/",
-                is_external=True,
-            ),
-            spacing="5",
-            justify="center",
-            min_height="85vh",
-        ),
-        rx.logo(),
-    )
-
-app = rx.App()
-app.add_page(index, title="Welcome")
+app = rx.App(
+    lifespan_tasks=[lifespan],
+)
+app.add_page(index, title="歡迎")
+app.add_page(user_dashboard, route="/dashboard", title="使用者儀表板")
+app.add_page(course_selection, route="/course-selection", title="課程選擇")

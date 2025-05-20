@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12.9"
 dependencies = [
     "beanie>=1.29.0",
+    "pydantic-settings>=2.9.1",
+    "pydantic[email]>=2.11.4",
     "reflex>=0.7.11",
     "reflex-google-auth>=0.1.1",
 ]
