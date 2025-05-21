@@ -1,16 +1,29 @@
+"""系統日誌查閱頁面模組。
+
+此模組定義了供系統管理者查閱系統運作日誌的 Reflex 頁面。
+頁面包含篩選日誌的功能，並以表格形式展示日誌列表，
+同時提供查看單筆日誌詳細資訊的彈出視窗。
+"""
 import reflex as rx
 from reflex_google_auth import require_google_login
-import json # 用於格式化顯示 details
+import json # 用於格式化顯示 JSON details
 
-from ..states.auth import require_group
+from ..states.auth import require_group # 引入權限群組檢查裝飾器
 from ..models.users import UserGroup
 from ..models.system_log import LogLevel # 匯入 LogLevel
 from ..components import navbar
-from ..states.admin_logs_state import AdminLogsState # 匯入對應的 State
-from ..utils.funcs import format_datetime_to_taipei_str # 匯入時間格式化函式
+from ..states.admin_logs_state import AdminLogsState # 匯入此頁面專用的狀態管理類
+from ..utils.funcs import format_datetime_to_taipei_str # 匯入日期時間格式化輔助函式
 
 def get_log_level_color(level: LogLevel) -> str:
-    """根據日誌級別返回徽章顏色"""
+    """根據日誌級別返回對應的 Radix Themes 顏色方案 (color_scheme) 字串。
+
+    Args:
+        level (LogLevel): 日誌的級別。
+
+    Returns:
+        str: 對應於該日誌級別的顏色方案字串 (例如 "red", "amber", "blue")。
+    """
     if level == LogLevel.ERROR or level == LogLevel.CRITICAL:
         return "red"
     if level == LogLevel.WARNING:
@@ -24,14 +37,21 @@ def get_log_level_color(level: LogLevel) -> str:
 @rx.page(
     route="/admin/logs", # 建議使用 admin/ 前綴
     title="系統日誌查閱",
-    on_load=AdminLogsState.on_page_load
+    on_load=AdminLogsState.on_page_load # 頁面載入時觸發的事件
 )
-@require_google_login
-@require_group(allowed_groups=[UserGroup.ADMIN])
+@require_google_login # 要求使用者必須先登入 Google 帳號
+@require_group(allowed_groups=[UserGroup.SYSTEM_ADMIN]) # 要求使用者必須屬於 SYSTEM_ADMIN 群組
 def admin_logs_page() -> rx.Component:
-    """系統管理者頁面，用於查閱系統運作日誌與錯誤記錄。"""
+    """系統管理者查閱系統日誌的頁面元件。
+
+    此頁面允許管理者透過多種條件篩選日誌，
+    並以表格形式展示日誌列表，點擊可查看日誌詳情。
+
+    Returns:
+        rx.Component: 組建完成的系統日誌查閱頁面。
+    """
     return rx.vstack(
-        navbar(),
+        navbar(), # 頁面頂部導覽列
         rx.box(
             rx.heading("系統日誌查閱", size="7", margin_bottom="1em"),
             

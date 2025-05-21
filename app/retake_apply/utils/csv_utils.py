@@ -1,11 +1,17 @@
+"""CSV 檔案處理工具模組。
+
+此模組提供將 CSV 檔案內容匯入為 Beanie Document 模型，
+以及將 Beanie Document 模型列表匯出為 CSV 格式字串的功能。
+主要用於課程資料、學生應重補修名單的批次匯入，以及報名資料的匯出。
+"""
 from typing import List, Dict, Any, Optional
 import csv
 from io import StringIO
-# import pandas as pd # 移除 pandas 依賴，盡量使用標準庫
-from pydantic import BaseModel, ValidationError, Field as PydanticField # PydanticField to avoid conflict
+# 備註：已移除 pandas 依賴，改用標準庫 csv 進行處理。
+from pydantic import BaseModel, ValidationError, Field as PydanticField # PydanticField 以避免與 Beanie Field 衝突
 from collections import defaultdict
 
-from ..models.course import Course, CourseTimeSlot, VALID_PERIODS # 引入 VALID_PERIODS
+from ..models.course import Course, CourseTimeSlot, VALID_PERIODS # VALID_PERIODS 用於驗證
 from ..models.required_course import RequiredCourse
 from ..models.enrollment import Enrollment, EnrollmentStatus, PaymentStatus
 from ..models.users import User
@@ -32,10 +38,16 @@ class CourseCSVRow(BaseModel):
     # 可以在這裡加入 validator 來驗證節次代號和時間格式，
     # 但 CourseTimeSlot 模型本身已有驗證，這裡可以簡化。
     # 不過，為了在 CSV 驗證階段就提供明確錯誤，也可以保留部分驗證。
-    # 例如，驗證「是否開放選課」的布林轉換。
+    # 備註：雖然 CourseTimeSlot 模型本身已有驗證，
+    # 但在 CSV 驗證階段加入部分驗證（例如「是否開放選課」的布林轉換）
+    # 可以更早地提供明確的錯誤回饋給使用者。
 
     def to_time_slot(self) -> CourseTimeSlot:
-        """將 CSV 行中的時段資訊轉換為 CourseTimeSlot 物件。"""
+        """將 CSV 行資料中的上課時間相關欄位轉換為 `CourseTimeSlot` 物件。
+
+        Returns:
+            CourseTimeSlot: 根據 CSV 行資料建立的課程時間插槽物件。
+        """
         return CourseTimeSlot(
             week_number=self.上課時間_週次,
             day_of_week=self.上課時間_星期,
@@ -58,11 +70,23 @@ class RequiredCourseCSVRow(BaseModel):
 # --- CSV 匯入功能 ---
 async def import_courses_from_csv(
     file_content_bytes: bytes,
-    default_academic_year: str # 由系統當前學年度設定傳入
+    default_academic_year: str
 ) -> Dict[str, List[str]]:
-    """
-    從 CSV 檔案內容匯入課程資料。
-    處理同一課程多個上課時段的情況。
+    """從 CSV 檔案內容匯入多筆課程資料至資料庫。
+
+    此函式會讀取 CSV 檔案內容，驗證每一行資料，並將其轉換為 `Course` 物件。
+    特別處理同一課程（相同學年度、科目代碼）在 CSV 中可能因不同上課時段而出現多行的情況，
+    會將這些時段合併到單一 `Course` 物件的 `time_slots` 列表中。
+
+    Args:
+        file_content_bytes (bytes): CSV 檔案的原始位元組內容。
+        default_academic_year (str): 當 CSV 中的學年度欄位為空時，使用的預設學年度。
+                                     通常由系統當前的學年度設定傳入。
+
+    Returns:
+        Dict[str, List[str]]: 一個包含匯入結果的字典，
+                                 鍵為 "success" 的列表包含成功匯入的訊息，
+                                 鍵為 "errors" 的列表包含遇到的錯誤訊息。
     """
     results: Dict[str, List[str]] = {"success": [], "errors": []}
     raw_rows: List[Dict[str, Any]] = []
@@ -146,7 +170,20 @@ async def import_courses_from_csv(
 async def import_required_courses_from_csv(
     file_content_bytes: bytes
 ) -> Dict[str, List[str]]:
-    """從 CSV 檔案內容匯入學生應重補修名單。"""
+    """從 CSV 檔案內容匯入多筆學生應重補修科目記錄至資料庫。
+
+    此函式會讀取 CSV 檔案內容，驗證每一行資料，
+    並嘗試根據提供的學生 Google Email 或學號找到對應的 `User` 物件，
+    然後創建 `RequiredCourse` 物件。
+
+    Args:
+        file_content_bytes (bytes): CSV 檔案的原始位元組內容。
+
+    Returns:
+        Dict[str, List[str]]: 一個包含匯入結果的字典，
+                                 鍵為 "success" 的列表包含成功匯入的訊息，
+                                 鍵為 "errors" 的列表包含遇到的錯誤訊息。
+    """
     results: Dict[str, List[str]] = {"success": [], "errors": []}
     raw_rows: List[Dict[str, Any]] = []
 
@@ -204,53 +241,66 @@ async def import_required_courses_from_csv(
     return results
 
 async def export_enrollments_to_csv(enrollments: List[Enrollment]) -> str:
-    """
-    將學生報名資料匯出為 CSV 字串。
-    欄位應符合規格 6.3 (參考「報名下載資料.csv」樣本)。
+    """將提供的學生選課記錄列表轉換為 CSV 格式的字串。
+
+    輸出的 CSV 欄位將符合專案規格 6.3 中定義的「報名下載資料.csv」樣本格式。
+    這包括從關聯的 `User` 和 `Course` 模型中獲取必要資訊，
+    並特別處理上課時間 (`time_slots`) 的顯示格式。
+
+    Args:
+        enrollments (List[Enrollment]): 包含待匯出選課記錄的列表。
+                                        每個 `Enrollment` 物件應已預先載入 (fetch)
+                                        其 `user_id` 和 `course_id` 關聯。
+
+    Returns:
+        str: 代表選課記錄的 CSV 格式字串。若輸入列表為空，則回傳僅包含表頭的 CSV 字串。
     """
     output = StringIO()
     # 欄位名稱需與「報名下載資料.csv」樣本一致
-    # 範例欄位 (需根據實際樣本調整)
+    # 實際欄位順序和名稱應嚴格參照規格文件或樣本 CSV。
     fieldnames = [
-        "報名日期", "學號", "學生姓名", "選課序號", "科目代碼", "科目名稱", 
-        "學分數", "費用", "選課狀態", "繳費狀態", "授課教師", "上課時間" 
-        # "上課時間" 可能需要特別處理，因為 CourseTimeSlot 是列表
+        "報名日期", "學號", "學生姓名", "選課序號", "科目代碼", "科目名稱",
+        "學分數", "費用", "選課狀態", "繳費狀態", "授課教師", "上課時間"
+        # "上課時間" 欄位會將課程的多個 CourseTimeSlot 合併顯示。
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
 
     for i, enroll_obj in enumerate(enrollments):
-        # 確保關聯的 User 和 Course 已被 fetch
-        user = await enroll_obj.user_id.fetch() if enroll_obj.user_id else None
-        course = await enroll_obj.course_id.fetch() if enroll_obj.course_id else None
+        # 假設 enroll_obj.user_id 和 enroll_obj.course_id 已經被 fetch
+        # 在呼叫此函式前，應確保關聯資料已載入，以避免在迴圈中大量異步 I/O。
+        user = enroll_obj.user_id
+        course = enroll_obj.course_id
 
-        if not user or not course:
-            # 記錄錯誤或跳過此筆記錄
+        if not isinstance(user, User) or not isinstance(course, Course):
+            # 若關聯資料未正確載入，可以選擇記錄錯誤並跳過，或拋出異常。
+            # logging.warning(f"Skipping enrollment export due to missing user/course data: {enroll_obj.id}")
             continue
         
-        # 處理上課時間的表示 (可能需要合併多個時段為一個字串)
+        # 處理上課時間的表示 (合併多個時段為一個字串)
         time_slots_str_list = []
         if course.time_slots:
             for ts in course.time_slots:
+                # 格式範例: W10/D1/D1(08:00-08:50)@RoomA
                 ts_str = f"W{ts.week_number or '-'}/D{ts.day_of_week}/{ts.period}({ts.start_time}-{ts.end_time})"
                 if ts.location:
                     ts_str += f"@{ts.location}"
                 time_slots_str_list.append(ts_str)
-        time_slots_display = " | ".join(time_slots_str_list)
+        time_slots_display = " | ".join(time_slots_str_list) if time_slots_str_list else "未指定"
 
 
         row_data = {
             "報名日期": enroll_obj.enrolled_at.strftime("%Y-%m-%d %H:%M:%S") if enroll_obj.enrolled_at else "",
-            "學號": user.student_id or "",
-            "學生姓名": user.fullname or user.email, # 優先用 fullname
-            "選課序號": str(i + 1), # 或使用 enroll_obj.id (PydanticObjectId)
+            "學號": user.student_id if user.student_id else "N/A",
+            "學生姓名": user.fullname if user.fullname else user.email, # 優先使用 fullname
+            "選課序號": str(i + 1), # 使用迴圈索引作為序號，或可考慮使用 enroll_obj.id
             "科目代碼": course.course_code,
             "科目名稱": course.course_name,
-            "學分數": course.credits,
-            "費用": course.total_fee, # Course 模型應有 total_fee
+            "學分數": str(course.credits) if course.credits is not None else "",
+            "費用": str(course.total_fee) if course.total_fee is not None else "", # Course 模型應有 total_fee
             "選課狀態": enroll_obj.status.value if enroll_obj.status else "",
             "繳費狀態": enroll_obj.payment_status.value if enroll_obj.payment_status else "",
-            "授課教師": course.instructor_name or "",
+            "授課教師": course.instructor_name if course.instructor_name else "未指定",
             "上課時間": time_slots_display
         }
         writer.writerow(row_data)

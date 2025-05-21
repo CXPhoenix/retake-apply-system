@@ -1,24 +1,44 @@
+"""課程管理者管理學生應重補修名單頁面模組。
+
+此模組定義了供課程管理者（及系統管理者）新增、編輯、刪除及查詢
+學生應重補修科目記錄的 Reflex 頁面。
+功能包括手動輸入記錄、批次從 CSV 檔案匯入名單，以及展示記錄列表。
+"""
 import reflex as rx
 from reflex_google_auth import require_google_login
 
-from ..states.auth import require_group
-from ..models.users import UserGroup
-from ..components import navbar
-from ..states.manager_students_state import ManagerStudentsState # 匯入對應的 State
+from ..states.auth import require_group # 引入權限群組檢查裝飾器
+from ..models.users import UserGroup # UserGroup Enum 用於角色定義與檢查
+from ..components import navbar # 引入共用的導覽列元件
+from ..states.manager_students_state import ManagerStudentsState # 匯入此頁面專用的狀態管理類
 
 # --- 主頁面 ---
 @rx.page(
     route="/manager/students",
     title="學生應重補修名單管理",
-    on_load=ManagerStudentsState.on_page_load
+    on_load=ManagerStudentsState.on_page_load # 頁面載入時觸發的事件
 )
-@require_google_login
-@require_group(allowed_groups=[UserGroup.COURSE_MANAGER, UserGroup.ADMIN])
+@require_google_login # 要求使用者必須先登入 Google 帳號
+@require_group(allowed_groups=[UserGroup.COURSE_MANAGER, UserGroup.SYSTEM_ADMIN]) # 課程管理者或系統管理者可訪問
 def manager_students_page() -> rx.Component:
-    """課程管理者頁面，用於管理學生應重補修名單。"""
+    """課程管理者管理學生應重補修名單的頁面元件。
+
+    此頁面提供篩選、搜尋應重補修記錄列表的功能，允許管理者新增記錄
+    （透過表單或 CSV 匯入）、編輯現有記錄，以及刪除記錄。
+
+    Returns:
+        rx.Component: 組建完成的學生應重補修名單管理頁面。
+    """
 
     # --- 新增/編輯記錄 Modal 的表單部分 ---
     def record_form_fields() -> rx.Component:
+        """內部輔助函式，渲染新增或編輯應重補修記錄表單中的共用欄位。
+
+        這些欄位會綁定到 `ManagerStudentsState.form_data` 中的對應狀態變數。
+
+        Returns:
+            rx.Component: 包含應重補修記錄資訊輸入欄位的 VStack 元件。
+        """
         return rx.vstack(
             rx.form.field(
                 rx.form.label("學生識別碼 (學號或Email):"),

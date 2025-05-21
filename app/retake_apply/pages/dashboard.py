@@ -1,13 +1,26 @@
+"""應用程式儀表板頁面模組。
+
+此模組根據登入使用者的角色（學生、課程管理者、系統管理者）
+動態顯示不同的儀表板內容。
+每個角色的儀表板會展示與其職責相關的資訊摘要和操作連結。
+"""
 import reflex as rx
 from reflex_google_auth import require_google_login
 
-from ..states.dashboard_state import DashboardState # 匯入新的 DashboardState
-from ..models.users import UserGroup # 用於角色判斷
-from ..components import navbar 
-from ..utils.funcs import format_datetime_to_taipei_str # 匯入時間格式化函式
+from ..states.dashboard_state import DashboardState # 匯入儀表板頁面專用的狀態管理類
+from ..models.users import UserGroup # UserGroup Enum 用於角色判斷
+from ..components import navbar # 引入共用的導覽列元件
+from ..utils.funcs import format_datetime_to_taipei_str # 匯入日期時間格式化輔助函式
 
 # --- 學生儀表板元件 ---
 def student_dashboard_content() -> rx.Component:
+    """渲染學生角色的儀表板內容。
+
+    顯示學生個人應重補修科目列表、已登記課程列表，並提供前往選課頁面的連結。
+
+    Returns:
+        rx.Component: 代表學生儀表板內容的 Reflex UI 元件。
+    """
     return rx.vstack(
         rx.heading("學生儀表板", size="7", margin_bottom="1em"),
         rx.text(f"目前學年度: {DashboardState.current_academic_year_display}", color_scheme="gray", margin_bottom="1em"), # type: ignore
@@ -77,6 +90,13 @@ def student_dashboard_content() -> rx.Component:
 
 # --- 課程管理者儀表板元件 ---
 def course_manager_dashboard_content() -> rx.Component:
+    """渲染課程管理者角色的儀表板內容。
+
+    提供快速連結至課程管理、學生名單管理、學年度設定及報名資料管理等功能頁面。
+
+    Returns:
+        rx.Component: 代表課程管理者儀表板內容的 Reflex UI 元件。
+    """
     return rx.vstack(
         rx.heading("課程管理者儀表板", size="7", margin_bottom="1em"),
         rx.text(f"歡迎，{DashboardState.tokeninfo.get('name', '課程管理者')}!", margin_bottom="1em"), # type: ignore
@@ -88,13 +108,20 @@ def course_manager_dashboard_content() -> rx.Component:
             rx.link(rx.card(rx.text("管理學生報名資料", weight="medium")), href="/manager/enrollments", width="100%"),
             columns="2", spacing="3", width="100%", max_width="800px"
         ),
-        align_items="center",
+        align_items="center", # 使 Grid 內容水平居中
         width="100%",
         spacing="4"
     )
 
 # --- 系統管理者儀表板元件 ---
 def system_admin_dashboard_content() -> rx.Component:
+    """渲染系統管理者角色的儀表板內容。
+
+    提供快速連結至使用者角色管理、系統日誌查閱及學年度設定等功能頁面。
+
+    Returns:
+        rx.Component: 代表系統管理者儀表板內容的 Reflex UI 元件。
+    """
     return rx.vstack(
         rx.heading("系統管理者儀表板", size="7", margin_bottom="1em"),
         rx.text(f"歡迎，{DashboardState.tokeninfo.get('name', '系統管理者')}!", margin_bottom="1.5em"), # type: ignore
@@ -105,7 +132,7 @@ def system_admin_dashboard_content() -> rx.Component:
             rx.link(rx.card(rx.text("設定學年度與登記時間", weight="medium")), href="/manager/academic-year", width="100%"),
             columns="2", spacing="3", width="100%", max_width="800px"
         ),
-        align_items="center",
+        align_items="center", # 使 Grid 內容水平居中
         width="100%",
         spacing="4"
     )
@@ -114,13 +141,21 @@ def system_admin_dashboard_content() -> rx.Component:
 @rx.page(
     route="/dashboard", 
     title="儀表板",
-    on_load=DashboardState.on_page_load # 綁定到新的 DashboardState
+    on_load=DashboardState.on_page_load # 頁面載入時觸發的事件
 )
-@require_google_login # 所有儀表板都需要登入
+@require_google_login # 所有儀表板內容都需要使用者登入
 def dashboard_page() -> rx.Component:
-    """根據使用者角色顯示不同的儀表板。"""
+    """應用程式主儀表板頁面元件。
+
+    此頁面會根據當前登入使用者的角色 (學生、課程管理者、系統管理者)，
+    動態地渲染對應的儀表板內容。若使用者角色無法識別或無特定權限，
+    則會顯示一般的歡迎訊息。
+
+    Returns:
+        rx.Component: 組建完成的儀表板頁面。
+    """
     return rx.vstack(
-        navbar(),
+        navbar(), # 頁面頂部導覽列
         rx.box(
             rx.cond(
                 DashboardState.is_loading_dashboard_data, # type: ignore

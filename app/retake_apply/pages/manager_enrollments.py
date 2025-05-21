@@ -1,26 +1,38 @@
+"""課程管理者管理學生報名資料頁面模組。
+
+此模組定義了供課程管理者（及系統管理者）檢視、篩選、下載學生選課報名資料，
+以及進行現場手動報名作業的 Reflex 頁面。
+"""
 import reflex as rx
 from reflex_google_auth import require_google_login
 
-from ..states.auth import require_group
-from ..models.users import UserGroup
-# Enrollment, Course, User 模型在 State 中使用
-from ..components import navbar
-from ..states.manager_enrollments_state import ManagerEnrollmentsState # 匯入對應的 State
-from ..utils.funcs import format_datetime_to_taipei_str # 匯入時間格式化函式
+from ..states.auth import require_group # 引入權限群組檢查裝飾器
+from ..models.users import UserGroup # UserGroup Enum 用於角色定義與檢查
+# Enrollment, Course, User 等資料模型主要在 ManagerEnrollmentsState 中處理。
+from ..components import navbar # 引入共用的導覽列元件
+from ..states.manager_enrollments_state import ManagerEnrollmentsState # 匯入此頁面專用的狀態管理類
+from ..utils.funcs import format_datetime_to_taipei_str # 匯入日期時間格式化輔助函式
 
 # --- 主頁面 ---
 @rx.page(
     route="/manager/enrollments",
     title="學生報名資料管理",
-    on_load=ManagerEnrollmentsState.on_page_load
+    on_load=ManagerEnrollmentsState.on_page_load # 頁面載入時觸發的事件
 )
-@require_google_login
-@require_group(allowed_groups=[UserGroup.COURSE_MANAGER, UserGroup.ADMIN])
+@require_google_login # 要求使用者必須先登入 Google 帳號
+@require_group(allowed_groups=[UserGroup.COURSE_MANAGER, UserGroup.SYSTEM_ADMIN]) # 課程管理者或系統管理者可訪問
 def manager_enrollments_page() -> rx.Component:
-    """課程管理者頁面，用於檢視、下載學生報名資料，並可進行現場報名。"""
+    """課程管理者檢視、下載學生報名資料及進行現場報名的頁面元件。
 
+    此頁面提供篩選功能以查詢特定學年度或關鍵字的報名記錄，
+    以表格形式展示報名列表，並允許管理者匯出 CSV 檔案。
+    同時，提供一個「現場報名」的彈出視窗，供管理者為學生手動登記課程。
+
+    Returns:
+        rx.Component: 組建完成的學生報名資料管理頁面。
+    """
     return rx.vstack(
-        navbar(),
+        navbar(), # 頁面頂部導覽列
         rx.box(
             rx.heading("學生報名資料管理", size="7", margin_bottom="1em"),
             rx.hstack(

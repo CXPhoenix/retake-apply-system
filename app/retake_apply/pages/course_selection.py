@@ -1,17 +1,34 @@
+"""學生選課頁面模組。
+
+此模組定義了學生進行重補修課程選擇的 Reflex 頁面。
+頁面會顯示目前開放選修的課程列表，並允許學生進行線上選課登記。
+課程資訊以卡片形式展示，包含課程名稱、代碼、教師、學分、費用及上課時段等。
+"""
 import reflex as rx
 from reflex_google_auth import require_google_login
 
-from ..states.auth import require_group
-from ..models.users import UserGroup
+from ..states.auth import require_group # 引入權限群組檢查裝飾器
+from ..models.users import UserGroup # UserGroup Enum 用於角色定義與檢查
 from ..models.course import Course # Course 模型用於類型提示
-from ..components import navbar
-from ..states.course_selection_state import CourseSelectionState # 匯入對應的 State
+from ..components import navbar # 引入共用的導覽列元件
+from ..states.course_selection_state import CourseSelectionState # 匯入此頁面專用的狀態管理類
 
-def render_course_card(course: rx.Var[Course]) -> rx.Component: # course is a Var[Course]
-    """渲染單個課程卡片"""
-    # course_id_str = course.id.to(str) # type: ignore # Accessing .id on a Var needs .get() or direct use if allowed
-    # For simplicity in template, assume course is a dict-like structure or direct access works.
-    # If course is a Var[Course], direct access to its attributes like course.id should work in rx.cond/rx.foreach.
+def render_course_card(course: rx.Var[Course]) -> rx.Component: # course 參數是一個 Reflex Var 包裝的 Course 物件
+    """渲染單個課程的資訊卡片元件。
+
+    卡片包含課程的基本資訊、上課時段以及一個選課按鈕。
+    按鈕的狀態（文字、是否可點擊）會根據課程是否已被選修以及登記是否開放而動態變化。
+
+    Args:
+        course (rx.Var[Course]): 一個 Reflex Var，其值為 `Course` 模型實例，
+                                 代表要渲染的課程。
+
+    Returns:
+        rx.Component: 代表單個課程卡片的 Reflex UI 元件。
+    """
+    # 備註：在 Reflex 的 rx.foreach 迴圈中，傳遞給渲染函式的項目 (此處的 course)
+    # 通常會被自動包裝成 rx.Var。因此，可以直接存取其屬性，如 course.id。
+    # Reflex 會在後端處理 Var 的解析。
 
     is_enrolled = CourseSelectionState.enrolled_course_ids_this_year.contains(course.id.to(str)) # type: ignore
     
@@ -86,14 +103,23 @@ def render_course_card(course: rx.Var[Course]) -> rx.Component: # course is a Va
 @rx.page(
     route="/course-selection", 
     title="課程選擇",
-    on_load=CourseSelectionState.on_page_load
+    on_load=CourseSelectionState.on_page_load # 頁面載入時觸發的事件
 )
-@require_google_login # 必須登入才能訪問
-@require_group(allowed_groups=[UserGroup.AUTHENTICATED_USER]) # 所有已登入者可見，選課按鈕由State邏輯控制
+@require_google_login # 要求使用者必須先登入 Google 帳號
+@require_group(allowed_groups=[UserGroup.AUTHENTICATED_USER]) # 所有已驗證使用者均可訪問此頁面
+                                                              # 選課按鈕的可用性由 CourseSelectionState 內部邏輯控制
 def course_selection_page() -> rx.Component:
-    """學生課程選擇頁面，顯示可選的重補修課程並允許學生進行選課。"""
+    """學生課程選擇頁面的主元件。
+
+    此頁面顯示當前學年度可供選擇的重補修課程列表。
+    學生可以搜尋課程，並點擊課程卡片上的按鈕進行選課。
+    頁面頂部會顯示目前的學年度以及登記時間的相關訊息。
+
+    Returns:
+        rx.Component: 組建完成的學生課程選擇頁面。
+    """
     return rx.vstack(
-        navbar(),
+        navbar(), # 頁面頂部導覽列
         rx.box(
             rx.heading("重補修課程選擇", size="7", margin_bottom="0.25em"),
             rx.text(f"學年度: {CourseSelectionState.current_academic_year}", color_scheme="gray", margin_bottom="0.25em"),

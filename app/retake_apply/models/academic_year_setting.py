@@ -1,10 +1,10 @@
-from datetime import datetime # Python 標準庫的 datetime
+from datetime import datetime
 from typing import Optional
-from beanie import Document, Field # 從 beanie 匯入 Document 和 Field
-from ..utils.funcs import get_utc_now # 替換了 get_now
+from beanie import Document, Field
+from ..utils.funcs import get_utc_now # 使用 UTC 時間以確保時區一致性
 
-# 為了範例獨立性，如果 get_now 未提供，可以直接使用 datetime.utcnow
-# 例如： set_at: datetime = Field(default_factory=datetime.utcnow)
+# 備註：原先若有 get_now 函式，現已統一使用 get_utc_now。
+# 若需手動設定時間，可考慮 Field(default_factory=datetime.utcnow)
 
 class AcademicYearSetting(Document):
     """
@@ -28,9 +28,12 @@ class AcademicYearSetting(Document):
 
     @classmethod
     async def get_current(cls) -> Optional["AcademicYearSetting"]:
-        """
-        獲取當前有效的學年度設定。
-        優先查找 is_active 為 True 且 set_at 最新的記錄。
+        """獲取當前有效的學年度設定。
+
+        優先查找 `is_active` 為 `True` 且 `set_at` 最新的記錄。
+
+        Returns:
+            Optional["AcademicYearSetting"]: 當前有效的學年度設定物件，若無則為 `None`。
         """
         current_setting = await cls.find_one(
             cls.is_active == True,
@@ -48,25 +51,24 @@ class AcademicYearSetting(Document):
     ) -> "AcademicYearSetting":
         """
         設定新的學年度為當前作用中的學年度。
-        此操作會將先前所有 is_active 為 True 的設定更新為 False，
-        然後插入一筆新的 is_active 為 True 的學年度設定。
 
-        參數:
+        此操作會將先前所有 `is_active` 為 `True` 的設定更新為 `False`，
+        然後插入一筆新的 `is_active` 為 `True` 的學年度設定。
+
+        Args:
             academic_year (str): 新的學年度字串，例如 "113-1"。
             registration_start (Optional[datetime]): 學生登記開始時間。
             registration_end (Optional[datetime]): 學生登記結束時間。
             user_email (Optional[str]): 設定此學年度的使用者 Email。
 
-        返回:
+        Returns:
             AcademicYearSetting: 新建立並已設為作用中的學年度設定物件。
         """
-        # 使用 Beanie 的 update 方法將所有現存的 is_active 設為 False
-        # 注意：Beanie 的 update 方法通常作用於查詢結果的 Document 實例上，
-        # 或者使用 update_many。這裡我們用 find 結合 update。
-        # await cls.find(cls.is_active == True).update({"$set": {cls.is_active: False}})
-        # 更安全的作法是遍歷更新，或確保 update_many 的語法正確
-        # Beanie 的 update 適用於 Document 實例，若要更新多個文檔，應使用 collection.update_many
-        # 或者，如果 Beanie 的 find().update() 支援直接更新多個文檔的特定欄位：
+        # 將所有現存的 is_active 設為 False
+        # 考量到 Beanie 的 Document.update() 主要針對單一實例，
+        # 且 find().update() 的行為可能依賴版本或特定配置，
+        # 直接使用 motor collection 的 update_many 是更明確且可靠的做法，
+        # 以確保所有符合條件的舊設定都被正確停用。
         await cls.get_motor_collection().update_many(
             filter={"is_active": True},
             update={"$set": {"is_active": False, "updated_at": get_utc_now()}}
@@ -77,13 +79,19 @@ class AcademicYearSetting(Document):
             registration_start_time=registration_start,
             registration_end_time=registration_end,
             set_by_user_email=user_email,
-            set_at=get_utc_now(), # 確保使用 utcnow
+            set_at=get_utc_now(), # 確保使用 UTC 時間
             is_active=True
         )
         await new_setting.insert()
         return new_setting
 
     async def save(self, **kwargs):
-        """覆寫 save 方法以自動更新 updated_at 欄位。"""
+        """覆寫 `save` 方法以自動更新 `updated_at` 欄位。
+
+        在每次儲存文件前，將 `updated_at` 更新為當前 UTC 時間。
+
+        Args:
+            **kwargs: 傳遞給父類 `save` 方法的其他關鍵字參數。
+        """
         self.updated_at = get_utc_now()
         await super().save(**kwargs)

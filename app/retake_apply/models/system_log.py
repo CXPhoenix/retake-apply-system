@@ -45,14 +45,14 @@ class SystemLog(Document):
         """
         創建並儲存一筆新的系統日誌。
 
-        參數:
+        Args:
             level (LogLevel): 日誌的級別。
             message (str): 日誌的主要訊息。
             source (Optional[str]): 日誌的來源模組或功能。
             user_email (Optional[str]): 與此日誌相關的使用者 Email。
             details (Optional[Dict[str, Any]]): 其他結構化的詳細資訊。
 
-        返回:
+        Returns:
             SystemLog: 已儲存的日誌物件。
         """
         log_entry = cls(

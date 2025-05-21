@@ -1,23 +1,36 @@
+"""課程管理者設定學年度與登記時間頁面模組。
+
+此模組定義了供課程管理者（及系統管理者）設定和調整
+系統當前運作學年度以及學生選課登記起迄時間的 Reflex 頁面。
+頁面同時會展示學年度設定的歷史記錄。
+"""
 import reflex as rx
 from reflex_google_auth import require_google_login
-from ..states.auth import require_group # 從 auth.py 匯入 require_group
-from ..models.users import UserGroup
-# from ..models.academic_year_setting import AcademicYearSetting # 不直接在此使用模型
-from ..components import navbar
-from ..states.manager_academic_year_state import ManagerAcademicYearState # 匯入對應的 State
-from ..utils.funcs import format_datetime_to_taipei_str # 匯入時間格式化函式
+from ..states.auth import require_group # 從 auth.py 匯入權限群組檢查裝飾器
+from ..models.users import UserGroup # UserGroup Enum 用於角色定義與檢查
+# AcademicYearSetting 模型主要在 ManagerAcademicYearState 中使用，此處不直接匯入。
+from ..components import navbar # 引入共用的導覽列元件
+from ..states.manager_academic_year_state import ManagerAcademicYearState # 匯入此頁面專用的狀態管理類
+from ..utils.funcs import format_datetime_to_taipei_str # 匯入日期時間格式化輔助函式
 
 @rx.page(
-    route="/manager/academic-year",  # 建議使用 manager/ 前綴
+    route="/manager/academic-year",  # 建議使用 manager/ 前綴以區分管理功能
     title="學年度管理",
-    on_load=ManagerAcademicYearState.on_page_load # 頁面載入時觸發
+    on_load=ManagerAcademicYearState.on_page_load # 頁面載入時觸發的事件
 )
-@require_google_login
-@require_group(allowed_groups=[UserGroup.COURSE_MANAGER, UserGroup.ADMIN])
+@require_google_login # 要求使用者必須先登入 Google 帳號
+@require_group(allowed_groups=[UserGroup.COURSE_MANAGER, UserGroup.SYSTEM_ADMIN]) # 課程管理者或系統管理者可訪問
 def manager_academic_year_page() -> rx.Component:
-    """課程管理者頁面，用於設定與調整系統運作的學年度及學生登記時間。"""
+    """課程管理者設定學年度與學生登記時間的頁面元件。
+
+    此頁面顯示當前生效的學年度與登記時間，提供表單讓管理者設定新的學年度及時間，
+    並列出歷史設定記錄以供參考。
+
+    Returns:
+        rx.Component: 組建完成的學年度管理頁面。
+    """
     return rx.vstack(
-        navbar(),
+        navbar(), # 頁面頂部導覽列
         rx.box(
             rx.heading("學年度與登記時間設定", size="7", margin_bottom="1em"),
             rx.text("設定系統目前運作的學年度，以及學生選課登記的起迄時間。"),

@@ -1,12 +1,27 @@
+"""使用者管理頁面模組。
+
+此模組定義了供系統管理者管理使用者角色與權限的 Reflex 頁面。
+頁面提供搜尋使用者、檢視使用者列表及其目前角色，
+並允許系統管理者編輯特定使用者的角色指派。
+"""
 import reflex as rx
 from reflex_google_auth import require_google_login
-from ..states.auth import require_group # 從 auth.py 匯入 require_group
-from ..models.users import UserGroup # User 模型在 State 中使用
-from ..components import navbar
-from ..states.admin_users_state import AdminUsersState # 匯入對應的 State
+from ..states.auth import require_group # 從 auth.py 匯入權限群組檢查裝飾器
+from ..models.users import UserGroup # UserGroup Enum 用於角色定義與檢查
+from ..components import navbar # 引入共用的導覽列元件
+from ..states.admin_users_state import AdminUsersState # 匯入此頁面專用的狀態管理類
 
 def render_roles_badges(user_groups: rx.Var[list[UserGroup]]) -> rx.Component:
-    """輔助函式，用於渲染角色徽章列表"""
+    """輔助函式，用於將使用者的角色群組列表渲染為一組徽章 (badges)。
+
+    Args:
+        user_groups (rx.Var[list[UserGroup]]): 一個包含使用者角色群組 (UserGroup Enum)
+                                               列表的 Reflex Var。
+
+    Returns:
+        rx.Component: 一個包含多個 `rx.badge` 的 `rx.hstack` 元件，
+                      每個徽章代表一個角色。
+    """
     return rx.hstack(
         rx.foreach(
             user_groups,
@@ -18,14 +33,21 @@ def render_roles_badges(user_groups: rx.Var[list[UserGroup]]) -> rx.Component:
 @rx.page(
     route="/admin/users", # 建議使用 admin/ 前綴
     title="使用者管理",
-    on_load=AdminUsersState.on_page_load
+    on_load=AdminUsersState.on_page_load # 頁面載入時觸發的事件
 )
-@require_google_login
-@require_group(allowed_groups=[UserGroup.ADMIN]) # 假設 UserGroup.ADMIN 是系統管理員
+@require_google_login # 要求使用者必須先登入 Google 帳號
+@require_group(allowed_groups=[UserGroup.SYSTEM_ADMIN]) # 要求使用者必須屬於 SYSTEM_ADMIN 群組
 def admin_users_page() -> rx.Component:
-    """系統管理者頁面，用於管理使用者角色與權限。"""
+    """系統管理者管理使用者角色與權限的頁面元件。
+
+    此頁面允許管理者搜尋使用者、檢視使用者列表及其目前角色，
+    並透過彈出視窗編輯個別使用者的角色指派。
+
+    Returns:
+        rx.Component: 組建完成的使用者管理頁面。
+    """
     return rx.vstack(
-        navbar(),
+        navbar(), # 頁面頂部導覽列
         rx.box(
             rx.heading("使用者角色管理", size="7", margin_bottom="1em"),
             rx.hstack(

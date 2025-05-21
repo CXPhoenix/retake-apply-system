@@ -3,8 +3,8 @@ from typing import Optional, List, TYPE_CHECKING
 from enum import Enum
 from beanie import Document, Link, before_event, Insert
 from pydantic import Field
-# from .enrollment import Enrollment, PaymentStatus as EnrollmentPaymentStatus # EnrollmentPaymentStatus is now in Enrollment
-from ..utils.funcs import get_utc_now # 改用 get_utc_now
+# 備註：Enrollment 模型中的 PaymentStatus 列舉用於表示選課記錄本身的繳費狀態。
+from ..utils.funcs import get_utc_now # 使用 UTC 時間以確保時區一致性
 
 if TYPE_CHECKING:
     from .enrollment import Enrollment # 處理循環匯入
@@ -52,7 +52,13 @@ class Payment(Document):
         ]
 
     async def calculate_amount_due_from_enrollments(self) -> int:
-        """根據關聯的選課記錄計算應繳總金額。"""
+        """根據關聯的選課記錄計算應繳總金額。
+
+        遍歷所有連結的 `Enrollment` 記錄，獲取其對應課程的 `total_fee` 並加總。
+
+        Returns:
+            int: 計算得出的應繳總金額。
+        """
         total_due = 0
         if not self.enrollments:
             return 0
@@ -67,19 +73,29 @@ class Payment(Document):
 
     @before_event(Insert)
     async def set_initial_amount_due(self):
-        """在插入前，如果 amount_due 未設定，則根據選課計算。"""
+        """
+        Beanie `Insert` 事件鉤子：在首次插入繳費記錄前執行。
+
+        如果 `amount_due` (應繳金額) 未被明確設定（仍為初始值 0），
+        則會嘗試根據關聯的選課記錄 (`enrollments`) 計算應繳總金額。
+        此外，若只有一筆選課且該選課記錄為無需繳費，則將此繳費記錄也標註為無需繳費。
+        """
         if self.amount_due == 0 and self.enrollments:
             self.amount_due = await self.calculate_amount_due_from_enrollments()
         
-        # 如果 enrollments 只有一筆，且 payment_status 是 NOT_REQUIRED，則此 payment 也應是 NOT_REQUIRED
+        # 特殊處理：若僅關聯一筆選課，且該選課本身標註為無需繳費
         if len(self.enrollments) == 1:
-            enrollment = await self.enrollments[0].fetch() # type: ignore
-            # Need to import PaymentStatus from enrollment
+            enrollment_link = self.enrollments[0]
+            enrollment = await enrollment_link.fetch() # type: ignore[attr-defined] # Beanie Link fetch
+            
+            # 局部匯入以避免循環依賴，並獲取 Enrollment 中的 PaymentStatus
             from .enrollment import PaymentStatus as EnrollmentPaymentStatus
-            if enrollment and enrollment.payment_status == EnrollmentPaymentStatus.NOT_REQUIRED: # type: ignore
-                self.status = PaymentRecordStatus.PAID # 或新增一個 PAYMENT_NOT_REQUIRED 狀態
+            
+            if enrollment and enrollment.payment_status == EnrollmentPaymentStatus.NOT_REQUIRED:
+                self.status = PaymentRecordStatus.PAID # 將 PAID 視為無需繳費的最終狀態
                 self.amount_due = 0
-                self.notes = "課程無需繳費"
+                self.amount_paid = 0 # 也應設定已付金額為0
+                self.notes = "課程無需繳費，自動標記完成。"
 
 
     async def mark_as_paid(
@@ -90,7 +106,15 @@ class Payment(Document):
         receipt_number: Optional[str] = None,
         payment_date: Optional[datetime] = None
     ):
-        """將此繳費記錄標記為已付款，並更新相關選課記錄的狀態。"""
+        """將此繳費記錄標記為已付款，並同步更新相關選課記錄的繳費狀態。
+
+        Args:
+            amount_paid (int): 實際支付的金額。
+            payment_method (str): 支付方式（例如："信用卡"、"銀行轉帳"）。
+            transaction_id (Optional[str]): 支付平台或銀行的交易編號。
+            receipt_number (Optional[str]): 校內產生的收據編號。
+            payment_date (Optional[datetime]): 實際支付日期，若未提供則使用當前 UTC 時間。
+        """
         self.amount_paid = amount_paid
         self.payment_method = payment_method
         self.payment_date = payment_date or get_utc_now()
@@ -98,19 +122,24 @@ class Payment(Document):
         self.receipt_number = receipt_number
         self.status = PaymentRecordStatus.PAID
         self.updated_at = get_utc_now()
-        await self.save()
+        await self.save() # 儲存 Payment 自身的變更
 
-        # 更新相關 Enrollment 的 payment_status
-        # Need to import PaymentStatus from enrollment
-        from .enrollment import PaymentStatus as EnrollmentPaymentStatus
+        # 更新所有關聯 Enrollment 的 payment_status
+        from .enrollment import PaymentStatus as EnrollmentPaymentStatus # 局部匯入
         for enrollment_link in self.enrollments:
-            enrollment = await enrollment_link.fetch() # type: ignore
-            if enrollment: # type: ignore
-                enrollment.payment_status = EnrollmentPaymentStatus.PAID # type: ignore
-                # enrollment.payment_record = self # 建立反向連結 (如果 Enrollment 模型有此欄位)
-                await enrollment.save() # type: ignore
+            enrollment = await enrollment_link.fetch() # type: ignore[attr-defined] # Beanie Link fetch
+            if enrollment:
+                enrollment.payment_status = EnrollmentPaymentStatus.PAID
+                # enrollment.payment_record = self # 若 Enrollment 有反向連結欄位，可在此設定
+                await enrollment.save()
 
     async def save(self, **kwargs):
-        """覆寫 save 方法以自動更新 updated_at 欄位。"""
+        """覆寫 `save` 方法以自動更新 `updated_at` 欄位。
+
+        在每次儲存文件前，將 `updated_at` 更新為當前 UTC 時間。
+
+        Args:
+            **kwargs: 傳遞給父類 `save` 方法的其他關鍵字參數。
+        """
         self.updated_at = get_utc_now()
         await super().save(**kwargs)

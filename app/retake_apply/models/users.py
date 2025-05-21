@@ -37,21 +37,37 @@ class User(Document):
     @computed_field
     @property
     def student_campus_id(self) -> str:
-        """計算並返回學生的校園 ID（從電子郵件中提取）"""
+        """計算並返回學生的校園 ID（通常是電子郵件地址的 "@" 前綴部分）。
+
+        Returns:
+            str: 從使用者電子郵件中提取的校園 ID。
+        """
         return self.email.split("@")[0]
 
     def update_token_secret(self) -> None:
-        """更新使用者的令牌密鑰"""
+        """產生並更新使用者的令牌密鑰 (`token_secret`)。
+        
+        使用 `os.urandom` 產生隨機位元組並進行 Base32 編碼。
+        此密鑰可用於例如 CSRF 保護或其他安全相關令牌的生成。
+        """
         self.token_secret = base64.b32encode(os.urandom(20)).decode()
 
     def update_login_datetime(self) -> None:
-        """更新使用者的最後登入時間"""
+        """更新使用者的最後登入時間 (`last_login`) 為當前 UTC 時間。"""
         self.last_login = get_utc_now()
 
     def update_groups(self, new_groups: List[UserGroup]) -> None:
-        """更新使用者的角色群組，合併新舊群組"""
-        temp = set(self.groups) | set(new_groups)
-        self.groups = list(temp)
+        """更新使用者的角色群組列表。
+
+        將提供的新群組列表與使用者現有的群組列表進行合併（取聯集），
+        以確保不重複且包含所有新舊群組。
+
+        Args:
+            new_groups (List[UserGroup]): 要添加到使用者的新角色群組列表。
+        """
+        current_groups_set = set(self.groups)
+        new_groups_set = set(new_groups)
+        self.groups = list(current_groups_set | new_groups_set)
 
     class Settings:
         name = "users"  # 明確指定集合名稱

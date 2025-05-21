@@ -1,16 +1,36 @@
+"""課程管理者管理課程資料頁面模組。
+
+此模組定義了供課程管理者（及系統管理者）新增、編輯、刪除及查詢重補修課程的 Reflex 頁面。
+功能包括手動輸入課程資訊、批次從 CSV 檔案匯入課程，以及展示課程列表。
+課程的詳細資訊（包括多個上課時段）可在彈出視窗中進行編輯。
+"""
 import reflex as rx
 from reflex_google_auth import require_google_login
 from typing import Dict, Any # List for type hint
 
-from ..states.auth import require_group
-from ..models.users import UserGroup
-from ..models.course import VALID_PERIODS # Course 模型在 State 中使用
-from ..components import navbar
-from ..states.manager_courses_state import ManagerCoursesState, EMPTY_TIME_SLOT_DICT # 匯入對應的 State
+from ..states.auth import require_group # 引入權限群組檢查裝飾器
+from ..models.users import UserGroup # UserGroup Enum 用於角色定義與檢查
+from ..models.course import VALID_PERIODS # VALID_PERIODS 用於節次下拉選單，Course 模型主要在 State 中使用
+from ..components import navbar # 引入共用的導覽列元件
+from ..states.manager_courses_state import ManagerCoursesState, EMPTY_TIME_SLOT_DICT # 匯入此頁面專用的狀態管理類
 
 # --- Helper function to render time slot form ---
 def render_time_slot_form(ts_data: rx.Var[Dict], index: rx.Var[int], form_type: str) -> rx.Component:
-    """渲染單個課程時段的表單。 form_type: 'add' 或 'edit'"""
+    """渲染用於新增或編輯課程時，單個上課時段的表單區塊。
+
+    根據 `form_type`（'add' 或 'edit'），此函式會動態綁定到
+    `ManagerCoursesState` 中對應的表單資料和更新方法。
+
+    Args:
+        ts_data (rx.Var[Dict]): 一個 Reflex Var，其值為代表單個時間插槽資料的字典。
+                                  字典結構應符合 `EMPTY_TIME_SLOT_DICT`。
+        index (rx.Var[int]): 此時間插槽在表單時間插槽列表中的索引。
+        form_type (str): 表單的類型，"add" 表示用於新增課程的表單，
+                         "edit" 表示用於編輯課程的表單。
+
+    Returns:
+        rx.Component: 代表單個時間插槽輸入欄位的 Reflex 卡片元件。
+    """
     state_method_prefix = "update_add_form_time_slot" if form_type == "add" else "update_edit_form_time_slot"
     remove_method = ManagerCoursesState.remove_time_slot_from_add_form if form_type == "add" else ManagerCoursesState.remove_time_slot_from_edit_form
     
@@ -97,15 +117,33 @@ def render_time_slot_form(ts_data: rx.Var[Dict], index: rx.Var[int], form_type: 
 @rx.page(
     route="/manager/courses",
     title="課程管理",
-    on_load=ManagerCoursesState.on_page_load
+    on_load=ManagerCoursesState.on_page_load # 頁面載入時觸發的事件
 )
-@require_google_login
-@require_group(allowed_groups=[UserGroup.COURSE_MANAGER, UserGroup.ADMIN])
+@require_google_login # 要求使用者必須先登入 Google 帳號
+@require_group(allowed_groups=[UserGroup.COURSE_MANAGER, UserGroup.SYSTEM_ADMIN]) # 課程管理者或系統管理者可訪問
 def manager_courses_page() -> rx.Component:
-    """課程管理者頁面，用於管理重補修課程。"""
+    """課程管理者管理重補修課程的頁面元件。
+
+    此頁面提供篩選、搜尋課程列表的功能，允許管理者新增課程（透過表單或 CSV 匯入）、
+    編輯現有課程資訊（包括上課時段），以及刪除課程。
+
+    Returns:
+        rx.Component: 組建完成的課程管理頁面。
+    """
     
     # --- 新增/編輯課程 Modal 的共用表單部分 ---
     def course_form_fields(form_data_var: rx.Var[Dict[str, Any]], form_type: str) -> rx.Component:
+        """內部輔助函式，渲染新增或編輯課程表單中的共用欄位。
+
+        Args:
+            form_data_var (rx.Var[Dict[str, Any]]): 包含表單數據的 Reflex Var。
+                                                    預期結構為 ManagerCoursesState 中的
+                                                    add_course_form_data 或 edit_course_form_data。
+            form_type (str): 表單類型，"add" 或 "edit"。
+
+        Returns:
+            rx.Component: 包含課程資訊輸入欄位的 VStack 元件。
+        """
         # form_type is "add" or "edit"
         time_slots_list_var = form_data_var[form_type + "_course_form_data"]["time_slots"] # type: ignore
         add_ts_method = getattr(ManagerCoursesState, f"add_new_time_slot_to_{form_type}_form")

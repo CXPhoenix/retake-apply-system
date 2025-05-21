@@ -54,13 +54,25 @@ class Enrollment(Document):
         ]
 
     async def save(self, **kwargs):
-        """覆寫 save 方法以自動更新 updated_at 欄位。"""
+        """覆寫 `save` 方法以自動更新 `updated_at` 欄位。
+
+        在每次儲存文件前，將 `updated_at` 更新為當前 UTC 時間。
+
+        Args:
+            **kwargs: 傳遞給父類 `save` 方法的其他關鍵字參數。
+        """
         self.updated_at = get_utc_now()
         await super().save(**kwargs)
 
     @property
     def is_active_enrollment(self) -> bool:
-        """判斷此選課記錄是否為當前有效的 (非已取消或衝堂)"""
+        """判斷此選課記錄是否為當前有效的（亦即非已取消狀態）。
+
+        如果選課狀態為學生自行退選、衝堂取消或管理員取消，則視為非有效選課。
+
+        Returns:
+            bool: 若選課記錄為有效狀態則回傳 `True`，否則回傳 `False`。
+        """
         return self.status not in [
             EnrollmentStatus.CANCELLED_BY_STUDENT,
             EnrollmentStatus.CANCELLED_CONFLICT,
