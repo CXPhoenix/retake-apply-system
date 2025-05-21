@@ -9,7 +9,7 @@
 *   **強化系統整合：** 採用現代化的技術棧，確保系統的穩定性、可擴展性及未來維護的便利性。
 *   **確保資料準確：** 透過系統化的資料管理與驗證機制，降低人為操作錯誤。
 
-## 技術棧 (Tech Stack)
+## 技術架構 (Tech Stack)
 
 *   **後端框架：** Python, [Reflex](https://reflex.dev/) (本專案基於 `reflex>=0.7.11`)
 *   **資料庫：** [MongoDB](https://www.mongodb.com/)
