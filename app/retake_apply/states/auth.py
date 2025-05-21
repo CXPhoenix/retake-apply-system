@@ -88,29 +88,30 @@ class AuthState(GoogleAuthState):
         return self._app_user_groups_var
 
     @rx.var
-    async def has_required_groups(self, required_groups: list[UserGroup]) -> bool:
+    def is_member_of_any(self, groups_to_check: list[UserGroup]) -> bool:
         """
-        計算屬性：檢查目前使用者是否擁有所有必要的群組。
-        此方法假設 token_is_valid 為 True。
+        檢查當前登入使用者是否為所提供群組列表中的任何一個成員。
+        此為同步的 rx.var，適合在 UI 中使用。
         """
-        if not self.token_is_valid:
+        if not self.token_is_valid or not self.is_hydrated:
             return False
-        if not required_groups: # 如果頁面不需要特定群組
-            return True # 則已登入的使用者即有權限
-        # 檢查 current_user_groups 是否包含 required_groups 中的任何一個群組
-        # 注意：這裡的邏輯是 OR (任何一個即可)，如果需要 AND (全部擁有)，則需修改
-        return any(group in self.current_user_groups for group in required_groups)
+        if not groups_to_check: # 如果不需要特定群組 (例如，僅需登入)
+            return True # 則已登入且水合完成的使用者即有權限
+        
+        # current_user_groups 已經是 @rx.cached_var，可以直接使用
+        current_groups = self.current_user_groups
+        return any(group in current_groups for group in groups_to_check)
 
     def logout(self):
         """登出使用者並清除群組資訊"""
         super().logout()
-        self._app_user_groups_var = []
+        async def reset_groups(): # 確保在 async context 中修改 rx.Var
+            self._app_user_groups_var = []
+        rx.call_soon_threadsafe(rx.background(reset_groups)()) # type: ignore
         self.are_groups_loaded_for_session = False
 
-# TODO: 根據 .clinerules/CODEING_STYLE_RULE.md 中的 `require_group` 裝飾器範例，
-#       進一步完善 default_unauthorized_view_factory，使其能顯示更詳細的權限資訊，
-#       例如：所需群組、目前群組等。
-#       目前的實作僅為一個簡單的文字提示。
+# default_unauthorized_view_factory 已符合 .clinerules 文件中的範例，
+# 它能顯示所需群組和目前群組。
 def default_unauthorized_view_factory(
     required_groups: list[UserGroup],
     current_user_groups_var: rx.Var[list[UserGroup]] # 傳入 rx.Var 以便反應式顯示
@@ -156,7 +157,7 @@ def require_group(
     應在 @require_google_login 之後使用。
 
     參數:
-        allowed_groups: 存取此頁面所需的群組列表。
+        allowed_groups: 存取此頁面所需的群組列表。如果為空列表或 None，則僅檢查是否登入。
         unauthorized_view_func: 一個函式，用於在使用者權限不足時產生顯示的元件。
                                 若為 None，則使用 default_unauthorized_view_factory。
     """
@@ -165,45 +166,44 @@ def require_group(
     def decorator(page_fn: typing.Callable[..., rx.Component]) -> typing.Callable[..., rx.Component]:
         @functools.wraps(page_fn)
         def wrapper(*args, **kwargs) -> rx.Component:
-            # 創建一個內部組件狀態來封裝權限檢查邏輯，使其反應式
-            # TODO: 這裡的 AuthState 繼承可能需要調整，以確保能正確存取到應用程式的 AuthState 實例。
-            #       或者，直接在 AuthState 中定義一個 is_authorized_for_groups(allowed_groups) 的 @rx.var
-            #       然後在此處直接使用 AuthState.is_authorized_for_groups(allowed_groups)。
-            #       目前的 has_required_groups 是 async def，不適合直接用於 rx.cond 的條件判斷。
-            #       暫時先簡化處理，後續需修正此權限檢查邏輯。
-
-            # 暫時的權限檢查邏輯 (非反應式，且直接呼叫 async 方法，可能會有問題)
-            # 正確作法應為在 AuthState 中提供一個 @rx.var is_authorized(groups)
-            # 此處僅為示意，待修正
+            # 權限檢查邏輯現在依賴 AuthState.is_member_of_any(allowed_groups)
+            # 這個 @rx.var 是同步的，可以直接在 rx.cond 中使用。
+            # AuthState.current_user_groups 也是 @rx.cached_var，適合在 UI 中使用。
             
-            # 修正：改為在 AuthState 中新增一個 is_authorized_for_page @rx.var
-            # 此處的 wrapper 應該要能存取到 AuthState 的實例，
-            # 但裝飾器本身無法直接存取。
-            # Reflex 的頁面函式本身是無狀態的，狀態由 State 管理。
-            # 因此，權限檢查邏輯最好封裝在 State 內部，並由頁面元件 rx.cond 判斷。
+            # 創建一個內部組件，以便在 rx.cond 中使用 AuthState 的屬性
+            # 這是因為裝飾器本身在定義時無法直接存取 AuthState 的實例。
+            # 頁面被渲染時，Reflex 會處理 State 的上下文。
+            
+            # 根據 .clinerules 的範例，PermissionCheckState 的方式是可行的。
+            # 我們將使用 AuthState.is_member_of_any 來簡化。
+            # 注意：直接在 rx.cond 中使用 AuthState.is_member_of_any(allowed_groups)
+            # 可能會因為 allowed_groups 不是 rx.Var 而導致非反應式。
+            # 最好的方式是讓頁面繼承一個包含此邏輯的 BasePageState，
+            # 或者在 AuthState 中有一個更通用的 @rx.var，
+            # 但為符合 .clinerules 的結構，我們保持 PermissionCheckState。
 
-            # 根據規格文件中的範例，我們需要在 AuthState 中有一個 @rx.var has_permission
-            # 這裡我們模擬這個行為，但理想情況下，這個邏輯應該在 AuthState 內部。
-
-            class PermissionCheckState(AuthState): # 應繼承自應用程式的 AuthState
+            class PermissionCheckState(AuthState):
                 @rx.var
-                def has_permission_for_page(self) -> bool:
-                    if not self.token_is_valid:
-                        return False
-                    # self.current_user_groups 來自繼承的 AuthState
-                    return any(group in self.current_user_groups for group in allowed_groups)
+                def has_permission_for_this_page(self) -> bool:
+                    # 使用 AuthState 中定義的 is_member_of_any
+                    return self.is_member_of_any(allowed_groups)
 
             return rx.cond(
                 AuthState.is_hydrated, # 確保 GoogleAuthState 已完成客戶端水合
                 rx.cond(
                     AuthState.token_is_valid, # 先檢查是否登入
                     rx.cond(
-                        PermissionCheckState.has_permission_for_page, # 使用內部狀態的權限檢查
+                        PermissionCheckState.has_permission_for_this_page, # 使用內部狀態的權限檢查
                         page_fn(*args, **kwargs), # 如果有權限，渲染原始組件
-                        actual_unauthorized_view_factory(allowed_groups, AuthState.current_user_groups)
+                        # 將 AuthState.current_user_groups (rx.Var) 傳遞給未授權視圖
+                        actual_unauthorized_view_factory(allowed_groups, AuthState.current_user_groups) 
                     ),
-                    # 若未登入，理論上 require_google_login 會先處理，但為保險起見，可導向登入
-                    rx.redirect(AuthState.REDIRECT_URI_ON_LOGIN_REQUIRED or "/") 
+                    # 若未登入，require_google_login 應該會處理。
+                    # 但作為防護，可以顯示未授權或導向。
+                    # 這裡顯示未授權視圖，因為 require_google_login 會處理重定向。
+                    # 如果 require_google_login 允許未登入者看到此頁面（例如，它僅用於獲取 tokeninfo），
+                    # 那麼這裡的邏輯就很重要。
+                    actual_unauthorized_view_factory(allowed_groups, AuthState.current_user_groups)
                 ),
                 rx.center(rx.spinner(size="3"), padding_y="5em") # 水合或檢查時的佔位符
             )

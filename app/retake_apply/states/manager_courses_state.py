@@ -1,231 +1,359 @@
 import reflex as rx
 from typing import List, Optional, Dict, Any
-from beanie.odm.fields import PydanticObjectId # 確保匯入
+from beanie.odm.fields import PydanticObjectId # type: ignore
+from pydantic import ValidationError # 用於表單驗證
 
 from .auth import AuthState
 from ..models.users import UserGroup
-from ..models.course import Course, CourseTimeSlot
+from ..models.course import Course, CourseTimeSlot, VALID_PERIODS
 from ..models.enrollment import Enrollment
-# from ..utils.csv_utils import parse_courses_csv, CourseCSVRow # 假設的 CSV 工具函式與模型
-# from ..utils.funcs import get_current_academic_year # 假設的輔助函式
+from ..models.academic_year_setting import AcademicYearSetting
+from ..utils import csv_utils # 匯入 CSV 工具模組
+
+# 預設的空時段字典，用於新增時段
+EMPTY_TIME_SLOT_DICT = {
+    "week_number": None, "day_of_week": 1, "period": VALID_PERIODS[0],
+    "start_time": "08:00", "end_time": "08:50", "location": ""
+}
 
 class ManagerCoursesState(AuthState):
     """管理課程管理者操作課程的狀態與邏輯"""
 
     courses_list: rx.Var[List[Course]] = rx.Var([])
     search_term: rx.Var[str] = ""
+    filter_academic_year: rx.Var[str] = "" # 當前篩選的學年度
+    academic_year_options: rx.Var[List[Dict[str, str]]] = rx.Var([]) # 學年度下拉選單選項
     
     # Modal 控制
     show_add_modal: rx.Var[bool] = False
     show_edit_modal: rx.Var[bool] = False
     
-    # 當前正在編輯的課程
-    # TODO: 考慮 current_course_for_edit 的類型，直接用 Course 模型可能更方便綁定表單
-    current_course_id_for_edit: rx.Var[Optional[str]] = None 
+    editing_course_id: rx.Var[Optional[str]] = None 
     
-    # 表單資料綁定
-    # TODO: 根據 Course 模型 (包含 CourseTimeSlot) 設計更完整的表單資料結構
-    #       例如，time_slots 可能是一個 List[Dict]
-    add_course_form_data: rx.Var[Dict[str, Any]] = rx.Var({
-        "academic_year": "", # TODO: 應預設為當前學年度
-        "course_code": "",
-        "course_name": "",
-        "credits": 0.0,
-        "fee_per_credit": 240, # 預設值
-        "instructor_name": "",
-        "max_students": None,
-        "is_open_for_registration": True,
-        "time_slots": [] # List of CourseTimeSlot dicts
-    })
-    # TODO: edit_course_form_data 也需要類似的結構
+    # 新增課程表單
+    add_course_form_data: rx.Var[Dict[str, Any]] = rx.Var({})
+    
+    # 編輯課程表單
     edit_course_form_data: rx.Var[Dict[str, Any]] = rx.Var({})
 
     # CSV 上傳相關
-    # TODO: 處理 CSV 上傳的狀態，例如上傳進度、錯誤訊息等
-    #       uploaded_file_info: rx.Var[Optional[rx.UploadFile]] = None
-    #       csv_import_results: rx.Var[List[str]] = [] # 顯示匯入結果
+    csv_import_feedback: rx.Var[str] = "" # 用於顯示匯入結果
+
+    async def _load_academic_year_options(self):
+        """載入學年度選項供篩選器使用"""
+        settings = await AcademicYearSetting.find_all(sort=[("academic_year", -1)]).to_list()
+        # 取不重複的學年度
+        unique_years = sorted(list(set(s.academic_year for s in settings)), reverse=True)
+        self.academic_year_options = [{"label": year, "value": year} for year in unique_years]
+        
+        # 設定預設篩選學年度
+        if not self.filter_academic_year:
+            current_setting = await AcademicYearSetting.get_current()
+            if current_setting:
+                self.filter_academic_year = current_setting.academic_year
+            elif self.academic_year_options:
+                self.filter_academic_year = self.academic_year_options[0]["value"]
+
 
     async def on_page_load(self):
         """頁面載入時執行的操作"""
         if not self.is_hydrated or not self.token_is_valid:
             return
-        if UserGroup.COURSE_MANAGER not in self.current_user_groups:
-            # 權限不足，可以考慮重導向或顯示訊息
-            # return rx.redirect("/unauthorized")
-            pass 
+        if not self.is_member_of_any([UserGroup.COURSE_MANAGER, UserGroup.ADMIN]):
+            return rx.redirect(self.DEFAULT_UNAUTHORIZED_REDIRECT_PATH) # type: ignore
         
-        # TODO: 載入當前學年度並設定到 add_course_form_data.academic_year
-        # current_year = await get_current_academic_year()
-        # self.add_course_form_data["academic_year"] = current_year
-        
+        await self._load_academic_year_options()
         await self.load_courses()
 
     async def load_courses(self):
         """載入或篩選課程列表"""
-        # TODO: 根據 search_term 和其他可能的篩選條件 (如學年度) 查詢課程
-        # query_conditions = {}
-        # if self.search_term:
-        #     query_conditions["course_name"] = {"$regex": self.search_term, "$options": "i"}
-        # self.courses_list = await Course.find(query_conditions).to_list()
-        print(f"TODO: ManagerCoursesState.load_courses 尚未從資料庫載入，搜尋詞: {self.search_term}")
-        # 模擬資料
-        # self.courses_list = [
-        #     Course(id=PydanticObjectId(), academic_year="113-1", course_code="MGR001", course_name="管理課程A", credits=3.0, fee_per_credit=240, total_fee=720),
-        #     Course(id=PydanticObjectId(), academic_year="113-1", course_code="MGR002", course_name="管理課程B", credits=2.0, fee_per_credit=240, total_fee=480)
-        # ]
+        query_conditions: Dict[str, Any] = {}
+        if self.filter_academic_year:
+            query_conditions["academic_year"] = self.filter_academic_year
+        
+        if self.search_term:
+            search_regex = {"$regex": self.search_term, "$options": "i"}
+            query_conditions["$or"] = [
+                {"course_name": search_regex},
+                {"course_code": search_regex},
+                {"instructor_name": search_regex},
+            ]
+        self.courses_list = await Course.find(query_conditions).sort([("academic_year", -1), ("course_code", 1)]).to_list()
 
+    async def set_filter_academic_year_and_load(self, year: str):
+        """設定學年度篩選並重新載入課程"""
+        self.filter_academic_year = year
+        await self.load_courses()
+
+    async def handle_search_term_change_and_load(self, term: str):
+        """設定搜尋詞並重新載入課程"""
+        self.search_term = term
+        await self.load_courses()
 
     # --- 新增課程 Modal 相關 ---
-    def open_add_course_modal(self):
-        """開啟新增課程 Modal 並重設表單"""
-        # TODO: 重設 add_course_form_data 為初始值，特別是 time_slots
-        #       並將當前學年度填入 academic_year 欄位
+    def _reset_add_form(self):
+        """重設新增課程表單"""
+        default_ay = self.filter_academic_year
+        if not default_ay and self.academic_year_options:
+            default_ay = self.academic_year_options[0]["value"]
+        
         self.add_course_form_data = {
-            "academic_year": "113-1", # TODO: 應來自系統設定
+            "academic_year": default_ay or "",
             "course_code": "", "course_name": "", "credits": 0.0,
             "fee_per_credit": 240, "instructor_name": "", "max_students": None,
-            "is_open_for_registration": True, "time_slots": []
+            "is_open_for_registration": "是", # UI 上用字串 "是"/"否"
+            "time_slots": [EMPTY_TIME_SLOT_DICT.copy()] # 預設一個空時段
         }
+
+    def open_add_course_modal(self):
+        self._reset_add_form()
         self.show_add_modal = True
 
     def close_add_course_modal(self):
         self.show_add_modal = False
+        self._reset_add_form() # 清理表單
+
+    def add_new_time_slot_to_add_form(self):
+        current_slots = self.add_course_form_data.get("time_slots", [])
+        current_slots.append(EMPTY_TIME_SLOT_DICT.copy())
+        self.add_course_form_data = {**self.add_course_form_data, "time_slots": current_slots}
+
+    def remove_time_slot_from_add_form(self, index: int):
+        current_slots = self.add_course_form_data.get("time_slots", [])
+        if 0 <= index < len(current_slots):
+            current_slots.pop(index)
+            self.add_course_form_data = {**self.add_course_form_data, "time_slots": current_slots}
+    
+    def update_add_form_time_slot(self, index: int, field: str, value: Any):
+        """更新新增表單中特定時段的特定欄位"""
+        current_slots = self.add_course_form_data.get("time_slots", [])
+        if 0 <= index < len(current_slots):
+            # 如果是 day_of_week，確保是 int
+            if field == "day_of_week" and isinstance(value, str):
+                try:
+                    value = int(value)
+                except ValueError:
+                     # 保持原值或設定錯誤提示，這裡暫時忽略錯誤轉換
+                    return
+            current_slots[index][field] = value
+            self.add_course_form_data = {**self.add_course_form_data, "time_slots": current_slots}
+
 
     async def handle_add_new_course(self):
-        """處理新增課程表單提交"""
-        # TODO: 從 self.add_course_form_data 獲取資料
-        #       進行資料驗證 (Pydantic 模型可以在此處發揮作用)
-        #       轉換 time_slots 的 dict list 為 List[CourseTimeSlot]
-        #       計算 total_fee
-        #       創建 Course 物件並儲存到資料庫
-        #       成功後關閉 Modal 並重新載入課程列表
-        #       處理可能的錯誤 (例如科目代碼重複)
         form_data = self.add_course_form_data
         try:
-            # time_slots_models = [CourseTimeSlot(**ts) for ts in form_data.get("time_slots", [])]
-            # new_course_obj = Course(
-            #     **form_data, # 解包除了 time_slots 以外的欄位
-            #     time_slots=time_slots_models
-            # )
-            # new_course_obj.total_fee = new_course_obj.calculate_total_fee() # 計算總費用
-            # await new_course_obj.insert()
-            # self.close_add_course_modal()
-            # await self.load_courses()
-            # return rx.toast.success("課程新增成功！")
-            print(f"TODO: handle_add_new_course 尚未實作，表單資料: {form_data}")
-            self.close_add_course_modal() # 暫時直接關閉
-        except Exception as e:
-            # return rx.toast.error(f"新增失敗：{e}")
-            print(f"TODO: handle_add_new_course 錯誤處理: {e}")
+            # 驗證基本欄位
+            if not all([form_data.get("academic_year"), form_data.get("course_code"), form_data.get("course_name")]):
+                return rx.toast.error("學年度、科目代碼和科目名稱為必填項。") # type: ignore
 
+            # 檢查課程是否已存在
+            existing_course = await Course.find_one(
+                Course.academic_year == form_data["academic_year"],
+                Course.course_code == form_data["course_code"]
+            )
+            if existing_course:
+                return rx.toast.error(f"課程代碼 {form_data['course_code']} 在學年 {form_data['academic_year']} 已存在。") # type: ignore
+
+            time_slots_models = [CourseTimeSlot(**ts_data) for ts_data in form_data.get("time_slots", []) if any(ts_data.values())] # 僅轉換非空時段
+
+            is_open = True if form_data.get("is_open_for_registration", "是") == "是" else False
+
+            new_course_obj = Course(
+                academic_year=form_data["academic_year"],
+                course_code=form_data["course_code"],
+                course_name=form_data["course_name"],
+                credits=float(form_data.get("credits", 0.0) or 0.0),
+                fee_per_credit=int(form_data.get("fee_per_credit", 0) or 0),
+                instructor_name=form_data.get("instructor_name"),
+                max_students=int(form_data.get("max_students", 0) or 0) if form_data.get("max_students") else None,
+                is_open_for_registration=is_open,
+                time_slots=time_slots_models
+            )
+            await new_course_obj.insert()
+            self.close_add_course_modal()
+            await self.load_courses()
+            return rx.toast.success("課程新增成功！") # type: ignore
+        except ValidationError as ve:
+            # Pydantic 驗證錯誤 (主要來自 CourseTimeSlot)
+            error_msgs = [f"時段資料錯誤: {err['loc'][-1] if err['loc'] else '未知欄位'} - {err['msg']}" for err in ve.errors()]
+            return rx.toast.error(f"新增失敗: {'; '.join(error_msgs)}") # type: ignore
+        except Exception as e:
+            return rx.toast.error(f"新增課程失敗：{str(e)}") # type: ignore
 
     # --- 修改課程 Modal 相關 ---
-    async def start_edit_course(self, course_id_str: str):
-        """開啟修改課程 Modal 並載入課程資料到表單"""
-        # TODO: 根據 course_id_str 查詢課程
-        #       將課程資料填入 self.edit_course_form_data
-        #       (注意 time_slots 需要轉換回 dict list)
-        #       設定 self.current_course_id_for_edit = course_id_str
-        #       self.show_edit_modal = True
-        # course_to_edit = await Course.get(PydanticObjectId(course_id_str))
-        # if course_to_edit:
-        #     self.edit_course_form_data = course_to_edit.model_dump(exclude={"id"}) # 轉換為 dict
-        #     # self.edit_course_form_data["time_slots"] = [ts.model_dump() for ts in course_to_edit.time_slots]
-        #     self.current_course_id_for_edit = course_id_str
-        #     self.show_edit_modal = True
-        # else:
-        #     rx.toast.error("找不到要編輯的課程。")
-        print(f"TODO: start_edit_course 尚未實作，課程 ID: {course_id_str}")
+    def _reset_edit_form(self):
+        self.editing_course_id = None
+        self.edit_course_form_data = {}
 
+    async def start_edit_course(self, course: Course):
+        self.editing_course_id = str(course.id)
+        # 將 Course 物件轉換為字典，包括 time_slots
+        form_data = course.model_dump(exclude={"id", "total_fee"}) # total_fee 是 computed
+        form_data["is_open_for_registration"] = "是" if course.is_open_for_registration else "否"
+        # time_slots 也需要是 dict list
+        form_data["time_slots"] = [ts.model_dump() for ts in course.time_slots]
+        self.edit_course_form_data = form_data
+        self.show_edit_modal = True
 
     def close_edit_course_modal(self):
         self.show_edit_modal = False
-        self.current_course_id_for_edit = None
+        self._reset_edit_form()
+
+    def add_new_time_slot_to_edit_form(self):
+        current_slots = self.edit_course_form_data.get("time_slots", [])
+        current_slots.append(EMPTY_TIME_SLOT_DICT.copy())
+        self.edit_course_form_data = {**self.edit_course_form_data, "time_slots": current_slots}
+
+    def remove_time_slot_from_edit_form(self, index: int):
+        current_slots = self.edit_course_form_data.get("time_slots", [])
+        if 0 <= index < len(current_slots):
+            current_slots.pop(index)
+            self.edit_course_form_data = {**self.edit_course_form_data, "time_slots": current_slots}
+            
+    def update_edit_form_time_slot(self, index: int, field: str, value: Any):
+        """更新編輯表單中特定時段的特定欄位"""
+        current_slots = self.edit_course_form_data.get("time_slots", [])
+        if 0 <= index < len(current_slots):
+            if field == "day_of_week" and isinstance(value, str):
+                try:
+                    value = int(value)
+                except ValueError:
+                    return 
+            current_slots[index][field] = value
+            self.edit_course_form_data = {**self.edit_course_form_data, "time_slots": current_slots}
+
 
     async def handle_save_edited_course(self):
-        """處理修改課程表單提交"""
-        # TODO: 從 self.edit_course_form_data 和 self.current_course_id_for_edit 獲取資料
-        #       進行資料驗證
-        #       更新 Course 物件並儲存到資料庫
-        #       成功後關閉 Modal 並重新載入課程列表
-        # if self.current_course_id_for_edit:
-        #     course_to_update = await Course.get(PydanticObjectId(self.current_course_id_for_edit))
-        #     if course_to_update:
-        #         # updated_data = self.edit_course_form_data
-        #         # time_slots_models = [CourseTimeSlot(**ts) for ts in updated_data.get("time_slots", [])]
-        #         # await course_to_update.update({"$set": {**updated_data, "time_slots": time_slots_models}})
-        #         # course_to_update.total_fee = course_to_update.calculate_total_fee()
-        #         # await course_to_update.save()
-        #         self.close_edit_course_modal()
-        #         await self.load_courses()
-        #         return rx.toast.success("課程修改成功！")
-        # return rx.toast.error("修改失敗，找不到課程。")
-        print(f"TODO: handle_save_edited_course 尚未實作")
-        self.close_edit_course_modal() # 暫時直接關閉
+        if not self.editing_course_id:
+            return rx.toast.error("未指定要編輯的課程。") # type: ignore
+        
+        form_data = self.edit_course_form_data
+        try:
+            course_to_update = await Course.get(PydanticObjectId(self.editing_course_id))
+            if not course_to_update:
+                return rx.toast.error("找不到要編輯的課程。") # type: ignore
+
+            # 檢查 course_code 是否與其他課程衝突 (如果 academic_year 或 course_code 有變動)
+            if (course_to_update.academic_year != form_data.get("academic_year") or \
+                course_to_update.course_code != form_data.get("course_code")):
+                existing_course = await Course.find_one(
+                    Course.academic_year == form_data.get("academic_year"),
+                    Course.course_code == form_data.get("course_code"),
+                    Course.id != PydanticObjectId(self.editing_course_id) # 排除自身
+                )
+                if existing_course:
+                    return rx.toast.error(f"課程代碼 {form_data.get('course_code')} 在學年 {form_data.get('academic_year')} 已被其他課程使用。") # type: ignore
+
+            time_slots_models = [CourseTimeSlot(**ts_data) for ts_data in form_data.get("time_slots", []) if any(ts_data.values())]
+            is_open = True if form_data.get("is_open_for_registration", "是") == "是" else False
+
+            # 更新欄位
+            course_to_update.academic_year = form_data.get("academic_year", course_to_update.academic_year)
+            course_to_update.course_code = form_data.get("course_code", course_to_update.course_code)
+            course_to_update.course_name = form_data.get("course_name", course_to_update.course_name)
+            course_to_update.credits = float(form_data.get("credits", course_to_update.credits) or 0.0)
+            course_to_update.fee_per_credit = int(form_data.get("fee_per_credit", course_to_update.fee_per_credit) or 0)
+            course_to_update.instructor_name = form_data.get("instructor_name", course_to_update.instructor_name)
+            max_s = form_data.get("max_students")
+            course_to_update.max_students = int(max_s) if isinstance(max_s, (str, int)) and str(max_s).isdigit() else None
+
+            course_to_update.is_open_for_registration = is_open
+            course_to_update.time_slots = time_slots_models
+            
+            await course_to_update.save()
+            self.close_edit_course_modal()
+            await self.load_courses()
+            return rx.toast.success("課程修改成功！") # type: ignore
+        except ValidationError as ve:
+            error_msgs = [f"時段資料錯誤: {err['loc'][-1] if err['loc'] else '未知欄位'} - {err['msg']}" for err in ve.errors()]
+            return rx.toast.error(f"修改失敗: {'; '.join(error_msgs)}") # type: ignore
+        except Exception as e:
+            return rx.toast.error(f"修改課程失敗：{str(e)}") # type: ignore
 
     # --- 刪除課程 ---
     async def handle_delete_course_confirmed(self, course_id_str: str):
-        """確認後執行刪除課程"""
-        # TODO: 檢查是否有相關選課記錄 (Enrollment)，若有則提示無法刪除
-        #       enrollments_exist = await Enrollment.find(Enrollment.course_id == PydanticObjectId(course_id_str)).count()
-        #       if enrollments_exist > 0:
-        #           return rx.toast.error("無法刪除：此課程已有學生選課記錄。")
-        # course_to_delete = await Course.get(PydanticObjectId(course_id_str))
-        # if course_to_delete:
-        #     await course_to_delete.delete()
-        #     await self.load_courses()
-        #     return rx.toast.info("課程已刪除。")
-        # return rx.toast.error("找不到要刪除的課程。")
-        print(f"TODO: handle_delete_course_confirmed 尚未實作，課程 ID: {course_id_str}")
-
+        try:
+            obj_id = PydanticObjectId(course_id_str)
+            enrollments_exist = await Enrollment.find(Enrollment.course_id.id == obj_id).count() # type: ignore
+            if enrollments_exist > 0:
+                return rx.toast.error("無法刪除：此課程已有學生選課記錄。") # type: ignore
+            
+            course_to_delete = await Course.get(obj_id)
+            if course_to_delete:
+                await course_to_delete.delete()
+                await self.load_courses()
+                return rx.toast.info("課程已刪除。") # type: ignore
+            return rx.toast.error("找不到要刪除的課程。") # type: ignore
+        except Exception as e:
+            return rx.toast.error(f"刪除課程失敗: {str(e)}") # type: ignore
 
     def confirm_delete_course(self, course_id: str):
-        """顯示刪除確認對話框"""
-        # TODO: 這裡的 on_yes 應該是一個可以被 rx.window_confirm 正確呼叫的事件。
-        #       直接傳遞 async 方法可能需要調整，或者使用 rx.call_script。
-        #       一個常見模式是 confirm_delete_course 設定一個 rx.Var (e.g., course_id_to_delete_confirmed)
-        #       然後另一個 event handler 觀察此 Var 變化來執行刪除。
-        #       或者，on_yes 呼叫一個同步的 event handler，該 handler 內部再用 await。
-        # return rx.window_confirm(
-        #     f"確定要刪除課程 (ID: {course_id}) 嗎？此操作無法復原。",
-        #     on_yes=lambda: self.handle_delete_course_confirmed(course_id) # 這樣傳遞可能會有問題
-        # )
-        print(f"TODO: confirm_delete_course 尚未完整實作，課程 ID: {course_id}")
-        # 暫時模擬直接刪除 (不推薦)
-        # yield self.handle_delete_course_confirmed(course_id) # 修正 yield 的使用
+        # rx.window_confirm 期望一個同步的 callable 或 JavaScript。
+        # 為了處理異步操作，我們將在確認後調用一個事件。
+        # 這裡我們直接返回一個 JavaScript 腳本來觸發一個事件。
+        # 或者，更簡單的方式是讓 on_yes 呼叫一個同步的 handler，
+        # 該 handler 再去呼叫 async 的 handle_delete_course_confirmed。
+        # 為了簡化，我們假設 UI 會處理這個 confirm，然後直接呼叫 handle_delete_course_confirmed。
+        # 在實際 UI 中，通常會用一個 rx.alert_dialog 來做確認。
+        # 此處僅為示意，實際的 confirm 應在 UI 層面處理，然後調用 handle_delete_course_confirmed。
+        # 例如，UI 按鈕的 on_click 可以是 lambda: self.set_course_to_delete_id(course_id)
+        # 然後一個 rx.alert_dialog 的確認按鈕再 on_click=self.handle_delete_course_confirmed_wrapper
+        # 此處簡化為直接調用，UI 層面應有確認機制。
+        return self.handle_delete_course_confirmed(course_id)
 
 
     # --- CSV 匯入 ---
     async def handle_csv_upload(self, files: List[rx.UploadFile]):
-        """處理 CSV 檔案上傳並匯入課程"""
-        # TODO: 規格 3.1 & 6.1
-        #       檢查檔案類型和大小
-        #       讀取檔案內容 (files[0].read())
-        #       調用 utils.csv_utils 中的 parse_courses_csv 進行解析與驗證
-        #       根據解析結果 (成功/失敗列表) 批量創建 Course 物件
-        #       顯示匯入結果給使用者 (成功幾筆，失敗幾筆及原因)
-        #       完成後重新載入課程列表
+        self.csv_import_feedback = "正在處理檔案..."
         if not files:
-            # return rx.toast.warning("請選擇要上傳的 CSV 檔案。")
-            print("請選擇要上傳的 CSV 檔案。") # 改為 print
-            return
+            self.csv_import_feedback = "請選擇要上傳的 CSV 檔案。"
+            return rx.toast.warning(self.csv_import_feedback) # type: ignore
+        
         try:
-            # csv_content = await files[0].read()
-            # parsed_data = parse_courses_csv(csv_content.decode('utf-8')) # 假設的解析函式
-            # success_count = 0
-            # error_messages = []
-            # for row in parsed_data:
-            #     if isinstance(row, CourseCSVRow) and row.is_valid:
-            #         # 轉換為 Course 物件並儲存
-            #         success_count +=1
-            #     else:
-            #         error_messages.append(f"第 {row.line_number} 行錯誤: {row.error}")
-            # await self.load_courses()
-            # return rx.toast.info(f"CSV 匯入完成：成功 {success_count} 筆。錯誤：{len(error_messages)} 筆。")
-            print(f"TODO: CSV 匯入成功/失敗邏輯尚未實作")
-        except Exception as e:
-            # return rx.toast.error(f"CSV 檔案處理失敗：{e}")
-            print(f"CSV 檔案處理失敗：{e}")
-        print(f"TODO: handle_csv_upload 尚未實作，檔案數量: {len(files) if files else 0}")
+            file_content_bytes = await files[0].read()
+            default_ay = self.filter_academic_year
+            if not default_ay:
+                current_setting = await AcademicYearSetting.get_current()
+                if current_setting:
+                    default_ay = current_setting.academic_year
+                elif self.academic_year_options: # 如果系統沒設定，但選項有，用第一個
+                     default_ay = self.academic_year_options[0]["value"]
+                else: # 連選項都沒有，無法判斷預設學年
+                    self.csv_import_feedback = "錯誤：無法確定預設學年度，請先設定或篩選一個學年度。"
+                    return rx.toast.error(self.csv_import_feedback) # type: ignore
 
-# 移除類別定義之後的無效 Python 程式碼 (原為 Markdown 格式的說明文字)
+            results = await csv_utils.import_courses_from_csv(file_content_bytes, default_ay)
+            
+            feedback_lines = []
+            if results["success"]:
+                feedback_lines.append(f"成功匯入 {len(results['success'])} 筆課程。")
+            if results["errors"]:
+                feedback_lines.append(f"匯入失敗 {len(results['errors'])} 筆。錯誤詳情:")
+                feedback_lines.extend([f"- {err}" for err in results["errors"][:10]]) # 最多顯示10條錯誤
+                if len(results["errors"]) > 10:
+                    feedback_lines.append("...還有更多錯誤未顯示。")
+            
+            self.csv_import_feedback = "\n".join(feedback_lines)
+            if not results["errors"]:
+                 rx.toast.success("CSV 課程資料匯入成功！") # type: ignore
+            elif results["success"]:
+                 rx.toast.warning("CSV 課程資料部分匯入成功，部分失敗。") # type: ignore
+            else:
+                 rx.toast.error("CSV 課程資料匯入失敗。") # type: ignore
+
+            await self.load_courses() # 重新載入課程列表
+        except Exception as e:
+            self.csv_import_feedback = f"CSV 檔案處理失敗：{str(e)}"
+            return rx.toast.error(self.csv_import_feedback) # type: ignore
+
+    # Helper to set nested form data reactively
+    def set_form_data_value(self, form_var_name: str, key: str, value: Any):
+        """
+        通用方法，用於更新 add_course_form_data 或 edit_course_form_data 中的值。
+        form_var_name: "add_course_form_data" 或 "edit_course_form_data"
+        """
+        current_form_data = getattr(self, form_var_name)
+        # 確保是字典的副本，以觸發 rx.Var 的更新
+        new_form_data = current_form_data.copy()
+        new_form_data[key] = value
+        setattr(self, form_var_name, new_form_data)

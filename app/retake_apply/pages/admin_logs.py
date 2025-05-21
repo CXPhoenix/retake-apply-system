@@ -1,100 +1,212 @@
 import reflex as rx
 from reflex_google_auth import require_google_login
-from ..states.auth import AuthState, authorize_by_groups
+import json # 用於格式化顯示 details
+
+from ..states.auth import require_group
 from ..models.users import UserGroup
-from ..models.system_log import SystemLog
+from ..models.system_log import LogLevel # 匯入 LogLevel
 from ..components import navbar
+from ..states.admin_logs_state import AdminLogsState # 匯入對應的 State
+from ..utils.funcs import format_datetime_to_taipei_str # 匯入時間格式化函式
 
-# TODO: 建立 AdminLogsState，繼承 AuthState。
-#       應包含：
-#       - logs_list: rx.Var[list[SystemLog]]
-#       - filter_level: rx.Var[str] (e.g., "ALL", "INFO", "ERROR")
-#       - filter_content: rx.Var[str]
-#       - filter_start_date: rx.Var[str]
-#       - filter_end_date: rx.Var[str]
-#       - show_details_modal: rx.Var[bool]
-#       - selected_log_details: rx.Var[Optional[SystemLog]]
-#       - async def load_logs(self):
-#       - async def view_log_details(self, log_id: str):
+def get_log_level_color(level: LogLevel) -> str:
+    """根據日誌級別返回徽章顏色"""
+    if level == LogLevel.ERROR or level == LogLevel.CRITICAL:
+        return "red"
+    if level == LogLevel.WARNING:
+        return "amber"
+    if level == LogLevel.INFO:
+        return "blue"
+    if level == LogLevel.DEBUG:
+        return "gray"
+    return "gray"
 
-# class AdminLogsState(AuthState):
-#     logs_list: rx.Var[list[SystemLog]] = []
-#     filter_level: rx.Var[str] = "ALL"
-#     # ... 其他 rx.Var 和事件處理器 ...
-#
-#     async def on_load(self):
-#         # await self.fetch_logs()
-#         print("TODO: AdminLogsState.on_load 載入日誌")
-#
-#     async def fetch_logs(self):
-#         # query_conditions = {}
-#         # if self.filter_level != "ALL":
-#         #     query_conditions["level"] = self.filter_level
-#         # if self.filter_content:
-#         #     query_conditions["message"] = {"$regex": self.filter_content, "$options": "i"} # 簡易訊息搜尋
-#         # # TODO: 日期範圍篩選 (需轉換日期字串為 datetime 物件)
-#         # self.logs_list = await SystemLog.find(query_conditions, sort=[("created_at", -1)]).limit(100).to_list() # 限制筆數
-#         print(f"TODO: AdminLogsState.fetch_logs 載入日誌 (篩選條件...)")
-#
-#     # TODO: 實作 view_log_details, Modal 控制等
-
-@rx.page(route="/admin-logs", title="系統日誌") # 路由根據 dashboard.py 中的連結調整
+@rx.page(
+    route="/admin/logs", # 建議使用 admin/ 前綴
+    title="系統日誌查閱",
+    on_load=AdminLogsState.on_page_load
+)
 @require_google_login
-# @authorize_by_groups(required_groups=[UserGroup.SYSTEM_ADMIN]) # 改由 State 控制權限
-def admin_logs() -> rx.Component:
-    """
-    系統管理者頁面，用於查閱系統運作日誌與錯誤記錄。
-    TODO: 此頁面應綁定到 AdminLogsState。
-    """
-    # TODO: 實現日誌詳細資訊 Modal (rx.modal)
-
+@require_group(allowed_groups=[UserGroup.ADMIN])
+def admin_logs_page() -> rx.Component:
+    """系統管理者頁面，用於查閱系統運作日誌與錯誤記錄。"""
     return rx.vstack(
         navbar(),
-        rx.heading("系統日誌查閱", size="lg", margin_bottom="1em"),
-        rx.text("（TODO: 此頁面應綁定到 AdminLogsState）"),
-        rx.hstack(
-            # rx.select(
-            #     ["ALL", "INFO", "WARNING", "ERROR"], # 應與 SystemLog 中的 level 一致
-            #     value=AdminLogsState.filter_level,
-            #     on_change=AdminLogsState.set_filter_level,
-            #     placeholder="選擇日誌級別",
-            # ),
-            # rx.input(placeholder="搜尋日誌內容...", value=AdminLogsState.filter_content, on_change=AdminLogsState.set_filter_content),
-            # rx.input(type_="date", value=AdminLogsState.filter_start_date, on_change=AdminLogsState.set_filter_start_date),
-            # rx.input(type_="date", value=AdminLogsState.filter_end_date, on_change=AdminLogsState.set_filter_end_date),
-            # rx.button("查詢", on_click=AdminLogsState.fetch_logs),
-            rx.select(["全部", "INFO", "WARNING", "ERROR"], placeholder="選擇日誌級別 (TODO)"),
-            rx.input(placeholder="搜尋日誌內容... (TODO)"),
-            rx.input(placeholder="開始日期 (YYYY-MM-DD) (TODO)", type_="date"),
-            rx.input(placeholder="結束日期 (YYYY-MM-DD) (TODO)", type_="date"),
-            rx.button("查詢 (TODO)"),
-            spacing="1em",
-            margin_bottom="1em",
-            flex_wrap="wrap" # 允許換行
+        rx.box(
+            rx.heading("系統日誌查閱", size="7", margin_bottom="1em"),
+            
+            rx.grid(
+                rx.form.field(
+                    rx.form.label("日誌級別:"),
+                    rx.select.root(
+                        rx.select.trigger(placeholder="選擇日誌級別"),
+                        rx.select.content(
+                            rx.foreach(
+                                AdminLogsState.log_level_options, # type: ignore
+                                lambda option: rx.select.item(option["label"], value=option["value"])
+                            )
+                        ),
+                        value=AdminLogsState.filter_level_str,
+                        on_change=AdminLogsState.set_filter_level, # type: ignore
+                        name="log_level_filter"
+                    ),
+                    grid_column="span 2",
+                ),
+                rx.form.field(
+                    rx.form.label("日誌來源:"),
+                    rx.input(
+                        placeholder="例如: AuthState",
+                        value=AdminLogsState.filter_source,
+                        on_change=AdminLogsState.set_filter_source, # type: ignore
+                        on_blur=AdminLogsState.apply_all_filters, # type: ignore
+                    ),
+                    grid_column="span 2",
+                ),
+                rx.form.field(
+                    rx.form.label("使用者 Email:"),
+                    rx.input(
+                        placeholder="輸入 Email",
+                        value=AdminLogsState.filter_user_email,
+                        on_change=AdminLogsState.set_filter_user_email, # type: ignore
+                        on_blur=AdminLogsState.apply_all_filters, # type: ignore
+                    ),
+                    grid_column="span 2",
+                ),
+                rx.form.field(
+                    rx.form.label("訊息內容包含:"),
+                    rx.input(
+                        placeholder="輸入關鍵字",
+                        value=AdminLogsState.filter_message_content,
+                        on_change=AdminLogsState.set_filter_message_content, # type: ignore
+                        on_blur=AdminLogsState.apply_all_filters, # type: ignore
+                    ),
+                    grid_column="span 6", # 佔滿剩餘空間
+                ),
+                rx.form.field(
+                    rx.form.label("開始日期:"),
+                    rx.input(
+                        type_="date",
+                        value=AdminLogsState.filter_start_date,
+                        on_change=AdminLogsState.set_filter_start_date, # type: ignore
+                        on_blur=AdminLogsState.apply_all_filters, # type: ignore
+                    ),
+                    grid_column="span 3",
+                ),
+                rx.form.field(
+                    rx.form.label("結束日期:"),
+                    rx.input(
+                        type_="date",
+                        value=AdminLogsState.filter_end_date,
+                        on_change=AdminLogsState.set_filter_end_date, # type: ignore
+                        on_blur=AdminLogsState.apply_all_filters, # type: ignore
+                    ),
+                    grid_column="span 3",
+                ),
+                rx.button(
+                    "套用篩選", 
+                    on_click=AdminLogsState.apply_all_filters, # type: ignore
+                    grid_column="span 2", 
+                    margin_top="1.75em", # 對齊 Label
+                    size="2"
+                ),
+                columns="12", # 總共 12 欄
+                spacing="3",
+                width="100%",
+                margin_bottom="1.5em"
+            ),
+
+            rx.cond(
+                AdminLogsState.logs_list.length() > 0,
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            rx.table.column_header_cell("時間戳"),
+                            rx.table.column_header_cell("級別"),
+                            rx.table.column_header_cell("來源"),
+                            rx.table.column_header_cell("使用者"),
+                            rx.table.column_header_cell("訊息"),
+                            rx.table.column_header_cell("操作"),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(
+                            AdminLogsState.logs_list,
+                            lambda log: rx.table.row(
+                                rx.table.cell(format_datetime_to_taipei_str(log.timestamp)), # 使用輔助函式
+                                rx.table.cell(rx.badge(log.level.value, color_scheme=get_log_level_color(log.level))),
+                                rx.table.cell(log.source or "N/A"),
+                                rx.table.cell(log.user_email or "N/A"),
+                                rx.table.cell(
+                                    rx.text(
+                                        log.message, 
+                                        white_space="nowrap", # 保持單行
+                                        overflow="hidden", 
+                                        text_overflow="ellipsis", 
+                                        max_width="300px", # 限制寬度
+                                        title=log.message # 滑鼠懸停顯示完整訊息
+                                    )
+                                ),
+                                rx.table.cell(
+                                    rx.button("詳情", on_click=lambda: AdminLogsState.view_log_details(log), size="1") # type: ignore
+                                ),
+                            )
+                        )
+                    ),
+                    variant="surface",
+                    width="100%",
+                ),
+                rx.text("找不到符合條件的日誌記錄。", color_scheme="gray", margin_top="1em")
+            ),
+            
+            # 日誌詳細資訊 Modal
+            rx.dialog.root(
+                rx.dialog.content(
+                    rx.dialog.title("日誌詳情"),
+                    rx.cond(
+                        AdminLogsState.selected_log_for_details,
+                        rx.vstack(
+                            rx.text(f"時間戳: {format_datetime_to_taipei_str(AdminLogsState.selected_log_for_details.timestamp, '%Y-%m-%d %H:%M:%S.%f') if AdminLogsState.selected_log_for_details else 'N/A'}"), # type: ignore
+                            rx.text(f"級別: {AdminLogsState.selected_log_for_details.level.value if AdminLogsState.selected_log_for_details.level else 'N/A'}"), # type: ignore
+                            rx.text(f"來源: {AdminLogsState.selected_log_for_details.source or 'N/A'}"), # type: ignore
+                            rx.text(f"使用者: {AdminLogsState.selected_log_for_details.user_email or 'N/A'}"), # type: ignore
+                            rx.text("訊息:", weight="bold"),
+                            rx.text(AdminLogsState.selected_log_for_details.message, white_space="pre-wrap"), # type: ignore
+                            rx.cond(
+                                AdminLogsState.selected_log_for_details.details, # type: ignore
+                                rx.vstack(
+                                    rx.text("詳細資料:", weight="bold", margin_top="0.5em"),
+                                    rx.code_block(
+                                        json.dumps(AdminLogsState.selected_log_for_details.details, indent=2, ensure_ascii=False), # type: ignore
+                                        language="json",
+                                        can_copy=True,
+                                        theme="light", # 或其他主題
+                                        width="100%",
+                                        max_height="300px", # 限制高度可滾動
+                                    ),
+                                    align_items="start",
+                                    width="100%"
+                                )
+                            ),
+                            spacing="2",
+                            align_items="start",
+                            width="100%"
+                        ),
+                        rx.text("沒有選擇日誌。") # 理論上不應顯示
+                    ),
+                    rx.dialog.close(
+                        rx.button("關閉", on_click=AdminLogsState.close_details_modal, margin_top="1em", variant="soft") # type: ignore
+                    ),
+                    min_width="600px" # 讓 Modal 寬一點
+                ),
+                open=AdminLogsState.show_details_modal, # type: ignore
+                on_open_change=AdminLogsState.set_show_details_modal, # type: ignore
+            ),
+            width="100%",
+            padding_x="2em",
+            padding_y="1em",
+            max_width="container.xl", # 使用更大的容器寬度
+            margin="0 auto",
         ),
-        # rx.foreach(
-        #     AdminLogsState.logs_list,
-        #     lambda log: rx.box(
-        #         rx.text(f"時間：{log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else 'N/A'}"),
-        #         rx.text(f"級別：{log.level}"),
-        #         rx.text(f"訊息：{log.message}"),
-        #         # ... 其他欄位 ...
-        #         # rx.button("查看詳情", on_click=lambda: AdminLogsState.view_log_details(str(log.id))),
-        #         border="1px solid #ddd", padding="1em", margin="0.5em 0", border_radius="5px",
-        #     )
-        # ),
-        rx.text("（TODO: 日誌列表顯示區，應使用 rx.data_table 或 rx.foreach）"),
-        
-        # TODO: 日誌詳細資訊 Modal
-
         align_items="center",
-        padding="2em",
-        # on_mount=AdminLogsState.on_load
+        width="100%",
     )
-
-# 以下 TODO 函式應移至 AdminLogsState 中
-# TODO: filter_logs_by_level(value) -> AdminLogsState.set_filter_level(value)
-# TODO: filter_logs_by_content(value) -> AdminLogsState.set_filter_content(value)
-# TODO: filter_logs_by_start_date(value) -> AdminLogsState.set_filter_start_date(value)
-# TODO: filter_logs_by_end_date(value) -> AdminLogsState.set_filter_end_date(value)
-# TODO: show_log_details(log_id) -> AdminLogsState.view_log_details(log_id)
