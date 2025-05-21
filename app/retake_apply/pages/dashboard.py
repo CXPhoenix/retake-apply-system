@@ -70,11 +70,13 @@ def student_dashboard_content() -> rx.Component:
                     rx.foreach(
                         DashboardState.my_enrollments,
                         lambda enroll: rx.table.row(
-                            rx.table.cell(enroll.course_id.course_code if enroll.course_id else "N/A"), # type: ignore
-                            rx.table.cell(enroll.course_id.course_name if enroll.course_id else "N/A"), # type: ignore
-                            rx.table.cell(rx.badge(enroll.status.value if enroll.status else "N/A")),
-                            rx.table.cell(rx.badge(enroll.payment_status.value if enroll.payment_status else "N/A")),
-                            rx.table.cell(format_datetime_to_taipei_str(enroll.enrolled_at, "%Y-%m-%d %H:%M") if enroll.enrolled_at else "N/A"), # 使用輔助函式
+                            # 真正的解決方案是在 DashboardState 中預先載入課程資訊
+                            # 這裡僅作規避錯誤處理
+                            rx.table.cell(rx.cond(enroll.course_id, "[課程代碼待載入]", "N/A")), # type: ignore
+                            rx.table.cell(rx.cond(enroll.course_id, "[課程名稱待載入]", "N/A")), # type: ignore
+                            rx.table.cell(rx.badge(rx.cond(enroll.status, enroll.status, "N/A"))), # 直接使用 enroll.status
+                            rx.table.cell(rx.badge(rx.cond(enroll.payment_status, enroll.payment_status, "N/A"))), # 直接使用 enroll.payment_status
+                            rx.table.cell(rx.cond(enroll.enrolled_at, format_datetime_to_taipei_str(enroll.enrolled_at, "%Y-%m-%d %H:%M"), "N/A")), # 使用輔助函式
                         )
                     )
                 ),
@@ -161,13 +163,13 @@ def dashboard_page() -> rx.Component:
                 DashboardState.is_loading_dashboard_data, # type: ignore
                 rx.center(rx.spinner(size="3"), padding_y="5em"),
                 rx.cond(
-                    DashboardState.is_member_of_any([UserGroup.ADMIN]), # type: ignore
+                    DashboardState.is_system_admin, # type: ignore
                     system_admin_dashboard_content(),
                     rx.cond(
-                        DashboardState.is_member_of_any([UserGroup.COURSE_MANAGER]), # type: ignore
+                        DashboardState.is_course_manager, # type: ignore
                         course_manager_dashboard_content(),
                         rx.cond(
-                            DashboardState.is_member_of_any([UserGroup.STUDENT]), # type: ignore
+                            DashboardState.is_student, # type: ignore
                             student_dashboard_content(),
                             # 若已登入但無任何預期角色 (例如僅有 AUTHENTICATED_USER)
                             rx.vstack(

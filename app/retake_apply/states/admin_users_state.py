@@ -26,14 +26,14 @@ class AdminUsersState(AuthState):
         show_edit_user_modal (rx.Var[bool]): 控制是否顯示編輯使用者角色的彈出視窗。
     """
 
-    users_list: rx.Var[List[User]] = rx.Var([])
-    search_term: rx.Var[str] = ""
+    users_list: List[User] = []
+    search_term: str = ""
     
     # --- 角色修改 Modal 相關狀態 ---
-    editing_user_id: rx.Var[Optional[str]] = None
-    editing_user_display_name: rx.Var[str] = "" # 用於在 Modal 標題顯示
-    roles_for_edit_modal: rx.Var[List[str]] = rx.Var([]) # 綁定 CheckboxGroup (存儲 UserGroup.value)
-    show_edit_user_modal: rx.Var[bool] = False
+    editing_user_id: Optional[str] = None
+    editing_user_display_name: str = "" # 用於在 Modal 標題顯示
+    roles_for_edit_modal: List[str] = [] # 綁定 CheckboxGroup (存儲 UserGroup.value)
+    show_edit_user_modal: bool = False
 
     async def on_page_load(self):
         """頁面載入時執行的非同步操作。

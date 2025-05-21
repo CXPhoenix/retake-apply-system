@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional
-from beanie import Document, Field
+from beanie import Document
+from pydantic import Field # Field 從 pydantic 匯入
+from pymongo import IndexModel # 匯入 IndexModel
 from ..utils.funcs import get_utc_now # 使用 UTC 時間以確保時區一致性
 
 # 備註：原先若有 get_now 函式，現已統一使用 get_utc_now。
@@ -22,8 +24,8 @@ class AcademicYearSetting(Document):
     class Settings:
         name = "academic_year_settings"  # 明確指定集合名稱
         indexes = [
-            [("academic_year", 1), ("is_active", 1)], # 方便查詢特定學年是否活躍
-            [("is_active", 1), ("set_at", -1)], # 方便查詢最新活躍設定
+            IndexModel([("academic_year", 1), ("is_active", 1)], name="academic_year_1_is_active_1"), # 方便查詢特定學年是否活躍
+            IndexModel([("is_active", 1), ("set_at", -1)], name="is_active_1_set_at_-1"), # 方便查詢最新活躍設定
         ]
 
     @classmethod

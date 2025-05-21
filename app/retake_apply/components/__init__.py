@@ -1,17 +1,9 @@
-"""校園重補修課程登記系統的可重用 UI 元件模組。
+"""Components 模組的初始化檔案。
 
-此模組旨在包含專案中多個頁面或部分可能共享的自訂 Reflex UI 元件。
-例如，通用的導覽列、頁尾、資料表格、表單欄位群組等。
+此檔案用於匯出模組內定義的共用元件，
+使其可以透過 `from retake_apply.components import ...` 的方式被其他模組引用。
 """
 
-# 預期將來可能會從此處匯出 components 子模組中的特定元件。
-# 例如:
-# from .navbar import navbar
-# from .footer import footer
-# from .data_table import DataTable
+from .navbar import navbar # 匯出 navbar 元件
 
-# __all__ = [
-#     "navbar",
-#     "footer",
-#     "DataTable",
-# ]
+__all__ = ["navbar"] # 定義 `from .components import *` 時會匯出的內容

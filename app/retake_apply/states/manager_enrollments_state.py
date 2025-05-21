@@ -14,22 +14,22 @@ from ..utils.funcs import check_course_conflict # 衝堂檢查
 class ManagerEnrollmentsState(AuthState):
     """管理課程管理者操作報名資料的狀態與邏輯"""
 
-    enrollments_list: rx.Var[List[Enrollment]] = rx.Var([])
-    search_term: rx.Var[str] = ""
-    selected_academic_year: rx.Var[str] = "" # 預設為空，由 on_page_load 設定
-    academic_year_options: rx.Var[List[Dict[str, str]]] = rx.Var([])
+    enrollments_list: List[Enrollment] = []
+    search_term: str = ""
+    selected_academic_year: str = "" # 預設為空，由 on_page_load 設定
+    academic_year_options: List[Dict[str, str]] = []
 
     # 現場報名 Modal 控制
-    show_manual_enroll_modal: rx.Var[bool] = False
-    manual_enroll_form_data: rx.Var[Dict[str, Any]] = rx.Var({
+    show_manual_enroll_modal: bool = False
+    manual_enroll_form_data: Dict[str, Any] = {
         "student_identifier": "", # 學號或 Email
         "selected_course_id_to_enroll": None, # 儲存選擇的課程 ID
-    })
-    manual_enroll_course_search_results: rx.Var[List[Course]] = rx.Var([])
-    manual_enroll_course_search_term: rx.Var[str] = ""
+    }
+    manual_enroll_course_search_results: List[Course] = []
+    manual_enroll_course_search_term: str = ""
     
     # 用於在 Modal 中顯示選中的課程名稱
-    manual_enroll_selected_course_name: rx.Var[str] = ""
+    manual_enroll_selected_course_name: str = ""
 
 
     async def _load_academic_year_options(self):

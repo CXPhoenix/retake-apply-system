@@ -45,23 +45,23 @@ class ManagerCoursesState(AuthState):
         csv_import_feedback (rx.Var[str]): 用於顯示 CSV 匯入操作結果的訊息。
     """
 
-    courses_list: rx.Var[List[Course]] = rx.Var([])
-    search_term: rx.Var[str] = ""
-    filter_academic_year: rx.Var[str] = ""
-    academic_year_options: rx.Var[List[Dict[str, str]]] = rx.Var([])
+    courses_list: List[Course] = []
+    search_term: str = ""
+    filter_academic_year: str = ""
+    academic_year_options: List[Dict[str, str]] = []
 
     # --- Modal 顯示控制 ---
-    show_add_modal: rx.Var[bool] = False
-    show_edit_modal: rx.Var[bool] = False
+    show_add_modal: bool = False
+    show_edit_modal: bool = False
 
-    editing_course_id: rx.Var[Optional[str]] = None
+    editing_course_id: Optional[str] = None
 
     # --- 表單資料 ---
-    add_course_form_data: rx.Var[Dict[str, Any]] = rx.Var({})
-    edit_course_form_data: rx.Var[Dict[str, Any]] = rx.Var({})
+    add_course_form_data: Dict[str, Any] = {}
+    edit_course_form_data: Dict[str, Any] = {}
 
     # --- CSV 匯入相關 ---
-    csv_import_feedback: rx.Var[str] = ""
+    csv_import_feedback: str = ""
 
     async def _load_academic_year_options(self):
         """內部輔助函式，從 `AcademicYearSetting` 載入不重複的學年度選項，

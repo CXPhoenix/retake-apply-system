@@ -3,6 +3,7 @@ from typing import Optional, TYPE_CHECKING
 from enum import Enum
 from beanie import Document, Link
 from pydantic import Field
+from pymongo import IndexModel # 匯入 IndexModel
 from .users import User
 from .course import Course
 from ..utils.funcs import get_utc_now # 改用 get_utc_now
@@ -48,9 +49,9 @@ class Enrollment(Document):
     class Settings:
         name = "enrollments"  # 明確指定集合名稱
         indexes = [
-            [("user_id", 1), ("course_id", 1), ("academic_year", 1), {"unique": True}],  # 確保同一學年學生不會重複選同一課程
-            [("academic_year", 1), ("status", 1)], # 方便按學年和狀態查詢
-            [("payment_status", 1)], # 方便查詢繳費狀態
+            IndexModel([("user_id", 1), ("course_id", 1), ("academic_year", 1)], name="unique_user_course_academic_year", unique=True),  # 確保同一學年學生不會重複選同一課程
+            IndexModel([("academic_year", 1), ("status", 1)], name="academic_year_status_idx"), # 方便按學年和狀態查詢
+            IndexModel([("payment_status", 1)], name="payment_status_idx"), # 方便查詢繳費狀態
         ]
 
     async def save(self, **kwargs):

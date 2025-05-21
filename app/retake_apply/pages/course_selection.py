@@ -65,7 +65,7 @@ def render_course_card(course: rx.Var[Course]) -> rx.Component: # course 參數�
                 align_items="center"
             ),
             rx.text(f"科目代碼: {course.course_code}", color_scheme="gray", size="2"), # type: ignore
-            rx.text(f"授課教師: {course.instructor_name or '未定'}", size="2"), # type: ignore
+            rx.text(rx.cond(course.instructor_name, "授課教師: " + course.instructor_name, "授課教師: 未定"), size="2"), # type: ignore
             rx.text(f"學分數: {course.credits.to(str)}", size="2"), # type: ignore
             rx.text(f"總費用: NT$ {course.total_fee.to(str)}", weight="bold", size="2"), # type: ignore
             
@@ -74,11 +74,13 @@ def render_course_card(course: rx.Var[Course]) -> rx.Component: # course 參數�
                     rx.text("上課時段:", weight="medium", size="2", margin_top="0.5em"),
                     rx.foreach(
                         course.time_slots, # type: ignore
-                        lambda ts: rx.text(
-                            f"星期{ts.day_of_week} {ts.period} ({ts.start_time}-{ts.end_time}) " +
-                            f"{'@'+ts.location if ts.location else ''} " +
-                            f"{'(W'+ts.week_number.to(str)+')' if ts.week_number else ''}",
-                            size="1"
+                        lambda ts: rx.hstack(
+                            rx.text(f"星期{ts.day_of_week} {ts.period} ({ts.start_time}-{ts.end_time})"),
+                            rx.cond(ts.location, rx.text(" @" + ts.location), rx.text("")),
+                            rx.cond(ts.week_number, rx.text(" (W" + ts.week_number.to_string() + ")"), rx.text("")),
+                            spacing="1",
+                            align_items="center", # 確保 hstack 內的元素對齊
+                            font_size="0.8em", # 調整字體大小以匹配原來的 size="1"
                         )
                     ),
                     align_items="start",
@@ -146,7 +148,7 @@ def course_selection_page() -> rx.Component:
                                 CourseSelectionState.available_courses,
                                 render_course_card
                             ),
-                            columns=["1", "1", "2", "3"], # 響應式欄數
+                            columns={"initial": "1", "sm": "1", "md": "2", "lg": "3"}, # 響應式欄數
                             spacing="3",
                             width="100%"
                         ),

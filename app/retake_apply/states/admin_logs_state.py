@@ -30,19 +30,19 @@ class AdminLogsState(AuthState):
         selected_log_for_details (rx.Var[Optional[SystemLog]]): 當前在彈出視窗中顯示的日誌物件。
     """
 
-    logs_list: rx.Var[List[SystemLog]] = rx.Var([])
+    logs_list: List[SystemLog] = []
     
     # 篩選條件狀態變數
-    filter_level_str: rx.Var[str] = "ALL"  # 綁定 Select，值為 LogLevel.value 或 "ALL"
-    filter_source: rx.Var[str] = ""
-    filter_user_email: rx.Var[str] = ""
-    filter_message_content: rx.Var[str] = ""
-    filter_start_date: rx.Var[str] = "" # YYYY-MM-DD
-    filter_end_date: rx.Var[str] = ""   # YYYY-MM-DD
+    filter_level_str: str = "ALL"  # 綁定 Select，值為 LogLevel.value 或 "ALL"
+    filter_source: str = ""
+    filter_user_email: str = ""
+    filter_message_content: str = ""
+    filter_start_date: str = "" # YYYY-MM-DD
+    filter_end_date: str = ""   # YYYY-MM-DD
     
     # 日誌詳細資訊 Modal 控制
-    show_details_modal: rx.Var[bool] = False
-    selected_log_for_details: rx.Var[Optional[SystemLog]] = None
+    show_details_modal: bool = False
+    selected_log_for_details: Optional[SystemLog] = None
 
     @rx.var
     def log_level_options(self) -> List[Dict[str, str]]:

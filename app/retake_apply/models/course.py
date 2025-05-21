@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Annotated
 from beanie import Document, Indexed # Link 不再直接使用於此模型
 from pydantic import Field, BaseModel, field_validator, computed_field # Pydantic v2 匯入
+from pymongo import IndexModel # 匯入 IndexModel
 from ..utils.funcs import get_utc_now # 使用 UTC 時間以確保時區一致性
 
 # VALID_PERIODS 常數定義：定義了系統中所有有效的課程節次代號。
@@ -139,7 +140,7 @@ class Course(Document):
         name = "courses"  # 明確指定 MongoDB collection 名稱
         indexes = [
             # 確保在同一學年度 (academic_year) 下，科目代碼 (course_code) 是唯一的。
-            [("academic_year", 1), ("course_code", 1), {"unique": True}],
+            IndexModel([("academic_year", 1), ("course_code", 1)], name="academic_year_1_course_code_1", unique=True),
         ]
 
     async def save(self, **kwargs):

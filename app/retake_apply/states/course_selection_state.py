@@ -33,16 +33,16 @@ class CourseSelectionState(AuthState):
         registration_time_message (rx.Var[str]): 顯示給使用者的關於登記時間的訊息。
     """
 
-    available_courses: rx.Var[List[Course]] = rx.Var([])
-    enrolled_course_ids_this_year: rx.Var[List[str]] = rx.Var([]) # 儲存已選課程的 ID (字串)
-    search_term: rx.Var[str] = ""
-    current_academic_year: rx.Var[str] = ""
-    is_loading: rx.Var[bool] = False
+    available_courses: List[Course] = []
+    enrolled_course_ids_this_year: List[str] = [] # 儲存已選課程的 ID (字串)
+    search_term: str = ""
+    current_academic_year: str = ""
+    is_loading: bool = False
     
-    is_registration_open: rx.Var[bool] = False
-    registration_time_message: rx.Var[str] = "" # 例如 "登記開放中 (開始時間 - 結束時間)"
+    is_registration_open: bool = False
+    registration_time_message: str = "" # 例如 "登記開放中 (開始時間 - 結束時間)"
 
-    @rx.cached_var
+    @rx.var(cache=True)
     def has_student_role(self) -> bool:
         """檢查當前登入使用者是否具有學生 (`UserGroup.STUDENT`) 角色。
 

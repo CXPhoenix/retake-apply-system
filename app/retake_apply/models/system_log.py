@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from enum import Enum
 from beanie import Document, Indexed
 from pydantic import Field
+from pymongo import IndexModel # 匯入 IndexModel
 from ..utils.funcs import get_utc_now # 改用 get_utc_now
 
 class LogLevel(str, Enum):
@@ -27,10 +28,10 @@ class SystemLog(Document):
     class Settings:
         name = "system_logs"  # 明確指定集合名稱
         indexes = [
-            [("timestamp", -1)],  # 按創建時間降序索引，方便按時間排序查詢
-            [("level", 1)],  # 按日誌級別索引，方便篩選
-            [("user_email", 1)], # 按使用者 Email 索引
-            [("source", 1)], # 按來源索引
+            IndexModel([("timestamp", -1)], name="timestamp_-1"),  # 按創建時間降序索引，方便按時間排序查詢
+            IndexModel([("level", 1)], name="level_1"),  # 按日誌級別索引，方便篩選
+            IndexModel([("user_email", 1)], name="user_email_1"), # 按使用者 Email 索引
+            IndexModel([("source", 1)], name="source_1"), # 按來源索引
         ]
 
     @classmethod

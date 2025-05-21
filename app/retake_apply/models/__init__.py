@@ -5,8 +5,11 @@
 
 from .users import User, UserGroup
 from .course import Course, CourseTimeSlot
-from .enrollment import Enrollment
+from .enrollment import Enrollment, PaymentStatus # 從 enrollment 匯入 PaymentStatus
 from .required_course import RequiredCourse
+from .academic_year_setting import AcademicYearSetting
+from .system_log import SystemLog, LogLevel
+from .payment import Payment, PaymentRecordStatus # 匯入 Payment 和 PaymentRecordStatus
 
 __all__ = [
     "User",
@@ -14,5 +17,11 @@ __all__ = [
     "Course",
     "CourseTimeSlot",
     "Enrollment",
+    "PaymentStatus", # 將 Enrollment 的 PaymentStatus 加入 __all__
     "RequiredCourse",
+    "AcademicYearSetting",
+    "SystemLog",
+    "LogLevel",
+    "Payment", # 將 Payment 加入 __all__
+    "PaymentRecordStatus", # 將 PaymentRecordStatus 加入 __all__
 ]

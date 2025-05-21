@@ -3,6 +3,7 @@ from typing import Optional, List, TYPE_CHECKING
 from enum import Enum
 from beanie import Document, Link, before_event, Insert
 from pydantic import Field
+from pymongo import IndexModel # 匯入 IndexModel
 # 備註：Enrollment 模型中的 PaymentStatus 列舉用於表示選課記錄本身的繳費狀態。
 from ..utils.funcs import get_utc_now # 使用 UTC 時間以確保時區一致性
 
@@ -47,8 +48,8 @@ class Payment(Document):
     class Settings:
         name = "payments"  # 明確指定集合名稱
         indexes = [
-            [("user_id", 1), ("status", 1)], # 方便查詢某用戶特定狀態的繳費單
-            [("status", 1), ("payment_due_date", 1)], # 方便查詢待處理且快到期的繳費單
+            IndexModel([("user_id", 1), ("status", 1)], name="user_id_1_status_1"), # 方便查詢某用戶特定狀態的繳費單
+            IndexModel([("status", 1), ("payment_due_date", 1)], name="status_1_payment_due_date_1"), # 方便查詢待處理且快到期的繳費單
         ]
 
     async def calculate_amount_due_from_enrollments(self) -> int:

@@ -12,16 +12,16 @@ from ..utils import csv_utils
 class ManagerStudentsState(AuthState):
     """管理課程管理者操作學生應重補修名單的狀態與邏輯"""
 
-    required_courses_list: rx.Var[List[RequiredCourse]] = rx.Var([])
-    search_term: rx.Var[str] = ""
+    required_courses_list: List[RequiredCourse] = []
+    search_term: str = ""
 
     # Modal 控制與表單資料 (合併新增與編輯)
-    show_form_modal: rx.Var[bool] = False
-    editing_record_id: rx.Var[Optional[str]] = None # None 表示新增模式
-    form_data: rx.Var[Dict[str, Any]] = rx.Var({})
+    show_form_modal: bool = False
+    editing_record_id: Optional[str] = None # None 表示新增模式
+    form_data: Dict[str, Any] = {}
     
     # CSV 上傳相關
-    csv_import_feedback: rx.Var[str] = ""
+    csv_import_feedback: str = ""
 
     @rx.var
     def form_modal_title(self) -> str:

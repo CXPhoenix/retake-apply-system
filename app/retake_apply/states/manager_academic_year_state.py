@@ -36,18 +36,18 @@ class ManagerAcademicYearState(AuthState):
             登記結束時間輸入格式錯誤或邏輯錯誤時的提示訊息。
     """
 
-    current_setting_display: rx.Var[Optional[AcademicYearSetting]] = None
-    academic_year_history: rx.Var[List[AcademicYearSetting]] = rx.Var([])
+    current_setting_display: Optional[AcademicYearSetting] = None
+    academic_year_history: List[AcademicYearSetting] = []
     
     # --- 新學年度設定表單相關狀態 ---
-    new_academic_year_input: rx.Var[str] = ""
-    new_reg_start_time_input: rx.Var[str] = "" # HTML datetime-local input format
-    new_reg_end_time_input: rx.Var[str] = ""   # HTML datetime-local input format
+    new_academic_year_input: str = ""
+    new_reg_start_time_input: str = "" # HTML datetime-local input format
+    new_reg_end_time_input: str = ""   # HTML datetime-local input format
 
     # --- 表單驗證錯誤訊息 ---
-    year_input_error_message: rx.Var[str] = ""
-    start_time_error_message: rx.Var[str] = ""
-    end_time_error_message: rx.Var[str] = ""
+    year_input_error_message: str = ""
+    start_time_error_message: str = ""
+    end_time_error_message: str = ""
 
     @rx.var
     def current_academic_year_str(self) -> str:

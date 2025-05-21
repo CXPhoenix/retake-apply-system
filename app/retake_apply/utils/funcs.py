@@ -4,9 +4,12 @@
 業務邏輯判斷（例如衝堂檢查）等通用功能。
 """
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
-from ..models.course import Course # CourseTimeSlot 內嵌於 Course 模型檔案中
+from typing import List, Optional, TYPE_CHECKING # 匯入 TYPE_CHECKING
+# from ..models.course import Course # CourseTimeSlot 內嵌於 Course 模型檔案中 # 移除直接匯入
 # 備註：Enrollment 模型目前未在此模組直接使用。
+
+if TYPE_CHECKING: # 只在型別檢查時匯入，避免執行時循環匯入
+    from ..models.course import Course
 
 # 備註：get_now 函式提供獲取特定時區時間的功能，
 # 但在專案內部，尤其是在與資料庫時間戳互動時，
@@ -47,14 +50,28 @@ def format_datetime_to_taipei_str(utc_dt: Optional[datetime], fmt: str = "%Y-%m-
     if utc_dt is None:
         return "" # 或可考慮回傳 "N/A" 或其他預設值
     
-    # 確保輸入的 datetime 是時區感知的 UTC (如果它來自 Beanie 且正確設定，應該就是)
-    # 如果 utc_dt 可能來自其他地方且是 naive datetime，需要先使其 aware
-    if utc_dt.tzinfo is None or utc_dt.tzinfo.utcoffset(utc_dt) is None:
-        # 假設 naive datetime 代表 UTC 時間
-        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+    # 由於 Reflex Var 包裝的 datetime 可能沒有 tzinfo 屬性，
+    # 我們假設傳入的 utc_dt 代表 UTC 時間，但可能是 naive 的。
+    # 我們從其基本屬性重建一個 aware datetime 物件。
+    try:
+        # 這些屬性標準 datetime 物件都有
+        aware_utc_dt = datetime(
+            year=utc_dt.year,
+            month=utc_dt.month,
+            day=utc_dt.day,
+            hour=utc_dt.hour,
+            minute=utc_dt.minute,
+            second=utc_dt.second,
+            microsecond=utc_dt.microsecond,
+            tzinfo=timezone.utc  # 強制賦予 UTC 時區
+        )
+    except AttributeError:
+        # 如果連 year, month 等基本屬性都沒有，那問題更嚴重
+        # 這通常不應該發生，如果傳入的確實是 datetime 物件
+        return "[日期格式錯誤]"
         
     taipei_tz = timezone(timedelta(hours=8))
-    taipei_dt = utc_dt.astimezone(taipei_tz)
+    taipei_dt = aware_utc_dt.astimezone(taipei_tz)
     return taipei_dt.strftime(fmt)
 
 # check_time_slot_overlap 函式將被 CourseTimeSlot.overlaps_with 取代，故移除或註解。
@@ -68,8 +85,8 @@ def format_datetime_to_taipei_str(utc_dt: Optional[datetime], fmt: str = "%Y-%m-
 
 
 def check_course_conflict(
-    selected_course: Course,
-    enrolled_courses: List[Course],
+    selected_course: 'Course', # 使用字串型別提示
+    enrolled_courses: List['Course'], # 使用字串型別提示
     current_academic_year: str
 ) -> Optional[str]:
     """

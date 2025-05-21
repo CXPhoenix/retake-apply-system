@@ -28,12 +28,12 @@ class DashboardState(AuthState):
     """
 
     # --- 學生儀表板相關狀態 ---
-    my_required_courses: rx.Var[List[RequiredCourse]] = rx.Var([])
-    my_enrollments: rx.Var[List[Enrollment]] = rx.Var([])
+    my_required_courses: List[RequiredCourse] = []
+    my_enrollments: List[Enrollment] = []
     
     # --- 通用顯示狀態 ---
-    current_academic_year_display: rx.Var[str] = "未設定"
-    is_loading_dashboard_data: rx.Var[bool] = False # 用於控制載入指示器的顯示
+    current_academic_year_display: str = "未設定"
+    is_loading_dashboard_data: bool = False # 用於控制載入指示器的顯示
 
     async def _load_student_dashboard_data(self):
         """內部輔助函式，專門載入學生角色儀表板所需的資料。
@@ -111,3 +111,19 @@ class DashboardState(AuthState):
         # 頁面級別的權限（例如是否登入）已由 @require_google_login 處理。
         # 此處專注於載入儀表板內容所需的資料。
         await self._load_dashboard_data()
+
+    # --- 角色檢查計算變數 ---
+    @rx.var
+    def is_system_admin(self) -> bool:
+        """檢查當前使用者是否為系統管理者。"""
+        return self.is_member_of_any([UserGroup.SYSTEM_ADMIN])
+
+    @rx.var
+    def is_course_manager(self) -> bool:
+        """檢查當前使用者是否為課程管理者。"""
+        return self.is_member_of_any([UserGroup.COURSE_MANAGER])
+
+    @rx.var
+    def is_student(self) -> bool:
+        """檢查當前使用者是否為學生。"""
+        return self.is_member_of_any([UserGroup.STUDENT])

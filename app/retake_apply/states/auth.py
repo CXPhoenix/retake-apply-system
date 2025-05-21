@@ -41,7 +41,7 @@ class AuthState(GoogleAuthState):
     DEFAULT_GROUP_ON_NO_GROUP = UserGroup.STUDENT.value
 
     # 使用 rx.Var 來儲存從資料庫同步的應用程式特定使用者群組，以實現反應式更新
-    _app_user_groups_var: rx.Var[list[UserGroup]] = rx.Var([])
+    _app_user_groups_var: list[UserGroup] = [] # 直接使用 Python list 初始化
     are_groups_loaded_for_session: bool = False
 
     @rx.var
@@ -52,8 +52,8 @@ class AuthState(GoogleAuthState):
             typing.Optional[str]: 若使用者已登入且 `user_info` 包含 `sub`，則返回其 Google ID；
                                   否則返回 `None`。
         """
-        if self.user_info and isinstance(self.user_info, dict):
-            return self.user_info.get("sub")
+        if self.tokeninfo and isinstance(self.tokeninfo, dict): # 改用 self.tokeninfo
+            return self.tokeninfo.get("sub")
         return None
     
     @rx.var(cache=True)
@@ -126,7 +126,7 @@ class AuthState(GoogleAuthState):
                 self._app_user_groups_var = []
                 console.warn("Google 登入 token 驗證失敗或已過期。")
 
-    @rx.cached_var
+    @rx.var
     def current_user_groups(self) -> list[UserGroup]:
         """獲取當前已登入使用者的應用程式內部角色群組列表。
 
@@ -138,9 +138,9 @@ class AuthState(GoogleAuthState):
         """
         if not self.token_is_valid:
             return []
+        # _app_user_groups_var 的值在 Reflex 中會被自動提取
         return self._app_user_groups_var
 
-    @rx.var
     def is_member_of_any(self, groups_to_check: list[UserGroup]) -> bool:
         """檢查當前登入使用者是否屬於提供的任一群組。
 
@@ -202,16 +202,16 @@ def default_unauthorized_view_factory(
         rx.text("抱歉，您沒有足夠的權限來存取此頁面或功能。"),
         rx.text("所需群組：", font_weight="bold"),
         rx.hstack(
-            *[rx.badge(group.value, color_scheme="amber") for group in required_groups],
+            *[rx.badge(group, color_scheme="amber") for group in required_groups], # 直接使用 group
             spacing="2"
         ),
         rx.text("您目前的群組：", font_weight="bold", margin_top="0.5em"),
         rx.cond(
-            rx.length(current_user_groups_var) > 0,
+            current_user_groups_var.length() > 0, # 使用 .length() 方法
             rx.hstack(
                 rx.foreach(
                     current_user_groups_var,
-                    lambda group_item: rx.badge(group_item.value, color_scheme="grass")
+                    lambda group_item: rx.badge(group_item, color_scheme="grass") # 直接使用 group_item
                 ),
                 spacing="2"
             ),
