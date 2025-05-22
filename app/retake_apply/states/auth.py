@@ -130,7 +130,7 @@ class AuthState(GoogleAuthState):
                 self._app_user_groups_var = []
                 console.warn("Google 登入 token 驗證失敗或已過期。")
 
-    @rx.var
+    @rx.var(cache=True)
     def current_user_groups(self) -> list[UserGroup]:
         """獲取當前已登入使用者的應用程式內部角色群組列表。
 

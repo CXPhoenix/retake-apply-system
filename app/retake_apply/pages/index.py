@@ -5,6 +5,7 @@
 """
 import reflex as rx
 from reflex_google_auth import google_login, google_oauth_provider # 從 reflex-google-auth 匯入登入元件
+from ..states.auth import AuthState # 匯入 AuthState 以檢查登入狀態
 
 def _login_form() -> rx.Component:
     """渲染包含 Google 登入按鈕的登入表單元件。
@@ -39,7 +40,6 @@ def _login_form() -> rx.Component:
         class_name="max-w-[30rem] w-full justify-center items-center",
     )
 
-@rx.page(route="/", title="登入系統") # 定義為根路徑頁面
 def index() -> rx.Component:
     """應用程式的索引頁面，通常作為登入頁面。
 
@@ -48,7 +48,12 @@ def index() -> rx.Component:
     Returns:
         rx.Component: 組建完成的索引/登入頁面。
     """
-    return rx.flex(
-        _login_form(),
-        class_name="h-[100dvh] justify-center items-center" # 使用 Tailwind CSS 使表單垂直和水平居中
+    return rx.cond(
+        AuthState.token_is_valid,  # 檢查使用者是否已通過 Google 驗證
+        rx.redirect("/dashboard"),  # 如果已驗證，則重定向到儀表板
+        # 否則，顯示登入表單
+        rx.flex(
+            _login_form(),
+            class_name="h-[100dvh] justify-center items-center" # 使用 Tailwind CSS 使表單垂直和水平居中
+        )
     )
