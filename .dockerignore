@@ -1,0 +1,10 @@
+# Python general files
+__pycache__
+*.py[cod]
+
+# MacOSX
+.DS_Store
+
+# reflex
+.states
+.web

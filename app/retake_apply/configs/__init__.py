@@ -1,8 +1,3 @@
-"""應用程式組態設定模組。
-
-此模組使用 `pydantic-settings` 函式庫定義用於從環境變數載入
-應用程式所需組態的類別。
-"""
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,4 +38,10 @@ class DbEnv(EnvSetting):
     username: str
     password: str
     authSource: str = "admin"  # 驗證資料庫
-    db_name: str # 應用程式使用的資料庫名稱
+    
+class AppEnv(EnvSetting):
+    model_config = SettingsConfigDict(env_prefix="FHSH_")
+    
+    managers_store: str = "managers"
+    system_configs_store: str = "system_configs"
+    default_year: int = 114
