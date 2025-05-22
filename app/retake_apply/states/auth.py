@@ -190,16 +190,15 @@ class AuthState(GoogleAuthState):
         在索引頁面載入時檢查登入狀態，若已登入則重定向到儀表板。
         此方法應被綁定到索引頁面的 on_load 事件。
         """
-        async with self: # 確保狀態更新的原子性
-            # 確保 token 狀態已從客戶端同步 (is_hydrated) 且 token 有效
-            if self.is_hydrated and self.token_is_valid:
-                # 檢查目前路由是否為根路徑，避免在其他頁面意外觸發重定向
-                # router.page.path 在 State 中可以直接使用
-                if self.router.page.path == "/":
-                    console.info("使用者已登入，從索引頁面重定向到儀表板。")
-                    return rx.redirect("/dashboard")
-            # 若未登入或不在索引頁，則不執行任何操作
-            return rx.console_log("使用者未登入或不在索引頁面，不執行重定向。")
+        # 確保 token 狀態已從客戶端同步 (is_hydrated) 且 token 有效
+        if self.is_hydrated and self.token_is_valid:
+            # 檢查目前路由是否為根路徑，避免在其他頁面意外觸發重定向
+            # router.page.path 在 State 中可以直接使用
+            if self.router.page.path == "/":
+                console.info("使用者已登入，從索引頁面重定向到儀表板。")
+                return rx.redirect("/dashboard")
+        # 若未登入或不在索引頁，則不執行任何操作
+        return rx.console_log("使用者未登入或不在索引頁面，不執行重定向。")
 
 # default_unauthorized_view_factory 已符合 .clinerules 文件中的範例，
 # 它能顯示所需群組和目前群組。

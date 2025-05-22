@@ -40,7 +40,8 @@ def _login_form() -> rx.Component:
         class_name="max-w-[30rem] w-full justify-center items-center",
     )
 
-@rx.page(on_load=AuthState.check_login_and_redirect_from_index)
+# @rx.page(on_load=AuthState.check_login_and_redirect_from_index)
+@rx.page("/", title="重補修申請登記系統")
 def index() -> rx.Component:
     """應用程式的索引頁面，通常作為登入頁面。
 
@@ -54,7 +55,7 @@ def index() -> rx.Component:
         rx.cond(
             AuthState.token_is_valid,  # 檢查使用者是否已通過 Google 驗證
             # 如果已驗證，顯示載入指示器，等待 on_load 事件處理重定向
-            rx.center(rx.spinner(size="3"), width="100%", height="100%"), # 讓 spinner 填滿 flex item
+            rx.center(rx.spinner(size="3"), width="100%", height="100%", on_mount=rx.redirect('/dashboard')), # 讓 spinner 填滿 flex item
             # 否則，顯示登入表單
             _login_form() # _login_form 本身已經有 class_name="max-w-[30rem] w-full ..."
         ),
