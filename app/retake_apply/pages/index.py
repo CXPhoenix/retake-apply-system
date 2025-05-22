@@ -40,20 +40,24 @@ def _login_form() -> rx.Component:
         class_name="max-w-[30rem] w-full justify-center items-center",
     )
 
+@rx.page(on_load=AuthState.check_login_and_redirect_from_index)
 def index() -> rx.Component:
     """應用程式的索引頁面，通常作為登入頁面。
 
     此頁面會顯示一個置中的登入表單，要求使用者透過 Google 帳號登入。
+    如果使用者已登入，`on_load` 事件會處理重定向到儀表板。
 
     Returns:
         rx.Component: 組建完成的索引/登入頁面。
     """
-    return rx.cond(
-        AuthState.token_is_valid,  # 檢查使用者是否已通過 Google 驗證
-        rx.redirect("/dashboard"),  # 如果已驗證，則重定向到儀表板
-        # 否則，顯示登入表單
-        rx.flex(
-            _login_form(),
-            class_name="h-[100dvh] justify-center items-center" # 使用 Tailwind CSS 使表單垂直和水平居中
-        )
+    return rx.flex( # 外層容器用於佈局
+        rx.cond(
+            AuthState.token_is_valid,  # 檢查使用者是否已通過 Google 驗證
+            # 如果已驗證，顯示載入指示器，等待 on_load 事件處理重定向
+            rx.center(rx.spinner(size="3"), width="100%", height="100%"), # 讓 spinner 填滿 flex item
+            # 否則，顯示登入表單
+            _login_form() # _login_form 本身已經有 class_name="max-w-[30rem] w-full ..."
+        ),
+        class_name="h-[100dvh] justify-center items-center", # 應用於外層 flex
+        width="100%",
     )

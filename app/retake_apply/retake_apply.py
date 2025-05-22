@@ -11,6 +11,6 @@ from .utils.lifespan import lifespan
 app = rx.App(
     lifespan_tasks=[lifespan],
 )
-app.add_page(index, title="歡迎")
-app.add_page(dashboard_page, route="/dashboard", title="使用者儀表板")
-app.add_page(course_selection_page, route="/course-selection", title="課程選擇")
+# app.add_page(index, title="歡迎")
+# app.add_page(dashboard_page, route="/dashboard", title="使用者儀表板")
+# app.add_page(course_selection_page, route="/course-selection", title="課程選擇")
