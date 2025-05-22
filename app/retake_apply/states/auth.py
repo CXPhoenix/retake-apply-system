@@ -121,6 +121,10 @@ class AuthState(GoogleAuthState):
                     # 理論上，若 token_is_valid 為 True，google_sub 應該存在。
                     self._app_user_groups_var = []
                     console.error("Google 登入成功，但無法從 tokeninfo 中獲取 'sub' (Google User ID)。")
+            
+            # If token was valid and user processing is done, redirect to dashboard.
+            if self.token_is_valid: # Double check token_is_valid before redirect
+                return rx.redirect("/dashboard")
             else:
                 # Token 無效，清除群組資訊
                 self._app_user_groups_var = []
