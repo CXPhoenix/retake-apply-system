@@ -60,5 +60,5 @@ class Student(Document):
         self.total_fee = sum(map(lambda v: v.fee, self.selected_courses))
         return self
 
-    class Setting:
+    class Settings:
         name = "students"

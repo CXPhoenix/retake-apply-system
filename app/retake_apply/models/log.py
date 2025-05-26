@@ -42,7 +42,7 @@ class SystemLog(Document):
             f"-- {self.user.name}({self.user.school_id}) did {self.action} {self.event}"
         )
 
-    class Setting:
+    class Settings:
         name = "system_logs"
 
 
@@ -61,7 +61,7 @@ class AccessLog(Document):
             f"-- {self.user.name}({self.user.school_id}) did {self.action} {self.event}"
         )
 
-    class Setting:
+    class Settings:
         name = "access_logs"
 
 
@@ -83,5 +83,5 @@ class ExceptionLog(Document):
             f" when {self.user.name}({self.user.school_id}) did {self.action} {self.event}"
         )
 
-    class Setting:
+    class Settings:
         name = "exception_logs"

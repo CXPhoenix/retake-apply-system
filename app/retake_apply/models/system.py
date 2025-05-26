@@ -35,7 +35,7 @@ class SystemConfig(Document):
     ]
     updated_time: Annotated[Utc8DateTime, Field(default_factory=get_now)]
 
-    class Setting:
+    class Settings:
         name = app_env.system_configs_store
 
 
@@ -43,5 +43,5 @@ class Manager(Document):
     school_id: Annotated[str, Field(...), Indexed(unique=True)]
     roles: Annotated[list[Groups], Field([Groups.MANAGER])]
 
-    class Setting:
+    class Settings:
         name = app_env.managers_store

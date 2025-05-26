@@ -22,3 +22,6 @@ class Course(Document):
     sessions: list[str]
     provided_credits: Annotated[int, Field(..., gt=0)]
     
+    class Settings:
+        name = "courses"
+    
