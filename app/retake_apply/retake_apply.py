@@ -3,7 +3,10 @@
 import reflex as rx
 
 from .utils.lifespan import lifespan
+from .pages import index_page, login_page
 
 app = rx.App(
     lifespan_tasks=[lifespan],
 )
+
+app.add_page(login_page, "/login")

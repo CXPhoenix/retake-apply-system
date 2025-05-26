@@ -22,6 +22,7 @@ class MongoDbClient:
             password=db_env.password,
             authSource=db_env.authSource,
         )
+        self.is_connected = False
     
     async def init_database_connection(self, database_name: str, documents: list[Document]) -> 'MongoDbClient':
         await init_beanie(database=self._client[database_name], document_models=documents)

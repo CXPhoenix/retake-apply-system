@@ -1,4 +1,4 @@
-"""應用程式生命週期管理模듈。
+"""應用程式生命週期管理模型。
 
 此模型定義了用於 Reflex 應用程式的生命週期 (lifespan) 上下文管理器，
 主要負責在應用程式啟動時初始化資料庫連線，並在應用程式關閉時妥善關閉連線。
@@ -7,6 +7,7 @@
 from contextlib import asynccontextmanager
 
 import reflex as rx
+from reflex.utils import console
 
 from ..configs import AppEnv
 from ..models import (
@@ -17,6 +18,7 @@ from ..models import (
     Student,
     SystemConfig,
     SystemLog,
+    User,
 )
 from .db import MongoDbClient
 
@@ -31,6 +33,16 @@ async def lifespan(app: rx.App):
     """
     app_env = AppEnv()
     mclient = MongoDbClient()
+    _all_models = [
+        AccessLog,
+        Course,
+        ExceptionLog,
+        Manager,
+        Student,
+        SystemConfig,
+        SystemLog,
+        User,
+    ]
     try:
         await mclient.init_database_connection(
             app_env.log_store, [SystemLog, AccessLog, ExceptionLog]
@@ -44,7 +56,8 @@ async def lifespan(app: rx.App):
             data_year = newest_year_settings[0].retake_year
         else:
             await SystemConfig(retake_year=app_env.default_year).insert()
-        await mclient.init_database_connection(str(data_year), [Student, Course])
+        await mclient.init_database_connection(str(data_year), [User, Student, Course])
+        console.info(f"所有 DB 都準備好了:\n{' '*8}{(',\n'+' '*8).join([m.get_settings().motor_collection.name + '(DB: ' + m.get_settings().motor_db.name + ')' for m in sorted(_all_models, key=lambda model: model.get_settings().motor_db.name)])}")
         yield  # 應用程式在此處運行
     finally:
         mclient.close_connection()
