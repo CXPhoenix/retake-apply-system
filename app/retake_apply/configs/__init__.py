@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,3 +46,5 @@ class AppEnv(EnvSetting):
     managers_store: str = "managers"
     system_configs_store: str = "system_configs"
     default_year: int = 114
+    log_store: str = "logs"
+    single_credit_fee: int = 240
