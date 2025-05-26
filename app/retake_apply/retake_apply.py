@@ -2,7 +2,6 @@
 
 import reflex as rx
 
-
 from .utils.lifespan import lifespan
 
 app = rx.App(
